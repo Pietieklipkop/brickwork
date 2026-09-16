@@ -1,0 +1,48 @@
+{
+  "name": "Brickwork Point-of-Purchase Expense Manager",
+  "short_name": "Brickwork",
+  "description": "Mobile-first receipt capture, AI OCR extraction, and multi-entity ZAR budgeting on Cloudflare Workers.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0B2240",
+  "categories": ["finance", "productivity", "business"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Capture Receipt",
+      "short_name": "Capture",
+      "description": "Quick snap point-of-purchase receipt",
+      "url": "/capture",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Expense History",
+      "short_name": "Expenses",
+      "description": "View recent receipts and filter history",
+      "url": "/expenses",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -9,5 +9,31 @@
 		"directory": ".svelte-kit/cloudflare"
 	},
 	"workers_dev": true,
-	"preview_urls": true
+	"preview_urls": true,
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "brickwork-db",
+			"database_id": "e45e4c35-4001-4892-a31c-1a21d73acf54",
+			"migrations_dir": "drizzle"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "RECEIPTS_BUCKET",
+			"bucket_name": "brickwork-receipts"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"send_email": [
+		{
+			"name": "EMAIL"
+		}
+	],
+	"vars": {
+		"APP_URL": "http://localhost:5173",
+		"TIMEZONE": "Africa/Johannesburg"
+	}
 }

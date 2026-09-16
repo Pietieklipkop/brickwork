@@ -1,9 +1,16 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import { onMount } from 'svelte';
 
 	let { children } = $props();
+
+	onMount(() => {
+		if ('serviceWorker' in navigator && typeof window !== 'undefined') {
+			navigator.serviceWorker.register('/service-worker.js').catch((err) => {
+				console.warn('Service worker registration:', err);
+			});
+		}
+	});
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
 {@render children()}

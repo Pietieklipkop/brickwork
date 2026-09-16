@@ -1,1 +1,17 @@
 @import 'tailwindcss';
+@plugin 'daisyui';
+
+/* Custom Brickwork Design Tokens (docs/DESIGN_TOKENS.md) */
+:root {
+	--color-navy-900: #0b2240;
+	--color-navy-800: #132f54;
+	--color-navy-50: #f0f4f9;
+	--color-emerald-600: #059669;
+	--color-amber-500: #f59e0b;
+	--color-rose-600: #e11d48;
+}
+
+/* Ensure tabular numerals for all financial currency displays */
+.tabular-nums {
+	font-variant-numeric: tabular-nums;
+}

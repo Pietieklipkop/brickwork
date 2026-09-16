@@ -19,9 +19,11 @@
 		"db:push": "drizzle-kit push",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
+		"db:migrate:local": "wrangler d1 migrations apply DB --local --yes",
 		"db:studio": "drizzle-kit studio"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "^4.13.0",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.60.0",
 		"@sveltejs/adapter-cloudflare": "^7.2.8",
@@ -49,5 +51,11 @@
 		"vitest": "^4.1.8",
 		"vitest-browser-svelte": "^2.1.1",
 		"wrangler": "^4.97.0"
+	},
+	"dependencies": {
+		"@lucide/svelte": "^1.46.0",
+		"better-auth": "^1.7.5",
+		"daisyui": "^5.7.38",
+		"lucide-svelte": "^1.0.1"
 	}
 }
