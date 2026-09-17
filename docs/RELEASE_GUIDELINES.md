@@ -202,11 +202,12 @@ Before and after every release, verify each item:
 - [x] Awaiting explicit user deploy request (Holding at Phase 4 Gate).
 
 ### Post-Flight Checklist (DevOps & User Responsibility)
-- [ ] Changes committed with descriptive conventional commit.
-- [ ] Feature branch pushed to GitHub `origin <branch-name>`.
-- [ ] `npx wrangler deploy` executed successfully.
-- [ ] Live edge URL verified: `https://brickwork.stefanvandyk3.workers.dev`.
-- [ ] Release log in `docs/RELEASE_GUIDELINES.md` updated with commit hash and timestamp.
+- [x] Changes committed with descriptive conventional commit.
+- [x] Feature branch pushed to GitHub `origin <branch-name>`.
+- [x] Remote D1 migration executed (`0001_add_company_members_and_reimbursements.sql`).
+- [x] `npx wrangler deploy` executed successfully.
+- [x] Live edge URL verified: `https://brickwork.stefanvandyk3.workers.dev`.
+- [x] Release log in `docs/RELEASE_GUIDELINES.md` updated with commit hash and timestamp.
 - [ ] User notified to perform manual merge into `main` on GitHub.
 
 ---
@@ -237,7 +238,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | :--- | :--- | :--- | :--- | :--- |
 | **v1.0.0** | 2026-09-16 | `main` ([`eb0dffd`](https://github.com/Pietieklipkop/brickwork/commit/eb0dffd)) | **Released** | Initial production release: Full Edge PWA (AC-01 - AC-14), D1 SQLite ORM, R2 receipts, Workers AI OCR, Svelte 5 Runes. |
 | **v1.1.0** | 2026-09-17 | [`182be1c`](https://github.com/Pietieklipkop/brickwork/commit/182be1c) (`fix/v1.1-anonymize-registration-placeholders`) | **Deployed (Pending Merge)** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
-| **v1.2.0** | 2026-09-17 | `feat/v1.2-company-members-and-reimbursements` | **In Development** | Feature: Company collaboration (members & granular RBAC) & Personal reimbursable expense tracking. |
+| **v1.2.0** | 2026-09-17 | [`7f7090e`](https://github.com/Pietieklipkop/brickwork/commit/7f7090e) (`feat/v1.2-company-members-and-reimbursements`) | **Deployed (Pending Merge)** | Feature: Company collaboration (members & granular RBAC) & Personal reimbursable expense tracking. |
 
 ---
 
@@ -270,10 +271,12 @@ This log is the permanent record of all production releases for the Brickwork pl
 ---
 
 #### Version 1.2.0 — 2026-09-17 (Feature Release: Company Collaboration & Reimbursements)
-- **Deployment Status:** In Development
-- **Target Branch:** `feat/v1.2-company-members-and-reimbursements`
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `5af4fb23-906a-42c2-9f71-f33fb7c751d0`)
+- **Target Branch:** `feat/v1.2-company-members-and-reimbursements` (Commit: `7f7090e`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
   - **Company Member Collaboration (AC-15):** Enable adding registered users by email to any company, allowing them to switch entities, view all company expenses, and log receipts/expenses.
   - **Granular Category Management Toggle:** When adding/managing members, owner can toggle whether the member can create/edit/delete categories and monthly spend targets. Non-permitted members view categories in read-only mode.
   - **Personal Reimbursable Expense Tracking (AC-16):** Context-aware toggle in `/capture` and `PreSaveBottomSheet` when in Personal profile to flag expenses as reimbursable and associate them with a designated business company.
   - **Ledger Badging:** Display `Reimbursable • [Company Name]` badges in `/expenses`.
+
