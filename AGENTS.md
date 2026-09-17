@@ -22,6 +22,7 @@ Before proposing or executing any code, architecture, or design changes, you **M
 | **API & Workflows** | [docs/API_AND_WORKFLOWS.md](./docs/API_AND_WORKFLOWS.md) | **Network & Endpoints:** SvelteKit form actions, REST endpoints, receipt image extraction, and R2 streaming pipelines. |
 | **Test Plan** | [docs/TEST_PLAN.md](./docs/TEST_PLAN.md) | **Quality Assurance:** Vitest unit test suites for cycle math & financial calculations, and Playwright end-to-end test suites mapped directly to AC-01 through AC-14. |
 | **Component Template** | [docs/templates/COMPONENT_DOC_TEMPLATE.md](./docs/templates/COMPONENT_DOC_TEMPLATE.md) | **Documentation Blueprint:** Required template for documenting any newly introduced UI component. |
+| **Release & Deployment Guidelines** | [docs/RELEASE_GUIDELINES.md](./docs/RELEASE_GUIDELINES.md) | **DevOps & Release Policy:** Mandatory spec-first workflow, branch naming (`feat/vX.Y-...`), quality gates, explicit user deployment approval gate, Cloudflare deploy protocol, and release changelog. |
 
 ---
 
@@ -79,3 +80,24 @@ When building or modifying any part of Brickwork, the following engineering rule
    - Deleting an expense record must atomically delete both the D1 database row and the R2 image asset.
 6. **Zero Arbitrary Tokens:**
    - Never hardcode arbitrary hex colors, shadows, or margins. Use the design tokens defined in [`docs/DESIGN_TOKENS.md`](./docs/DESIGN_TOKENS.md) and DaisyUI themes.
+
+---
+
+## 4. Mandatory Feature Release & Deployment Workflow
+
+Every release of a new feature, improvement, or bug fix must strictly adhere to [`docs/RELEASE_GUIDELINES.md`](./docs/RELEASE_GUIDELINES.md):
+
+1. **Specification First:** Update all relevant documentation files in `docs/` before writing code. Obtain explicit user confirmation.
+2. **Branch Creation:** Create an isolated branch named `feat/v<Version>-<feature-slug>` or `fix/v<Version>-<issue-slug>` (e.g. `feat/v1.1-recurring-expenses`). Never push release feature work directly to `main`.
+3. **Quality Gate Verification:** Run and pass all verification checks prior to signaling completion:
+   - `pnpm check`
+   - `pnpm test:unit --run`
+   - `npx playwright test`
+   - `pnpm build`
+4. **User Deployment Request Gate (Strict Hold):** Report readiness and **await the user's explicit command** to deploy. Do NOT deploy without user authorization.
+5. **Commit & Push Branch:** When deployment is requested:
+   - Commit with a descriptive conventional commit message indicating the release version.
+   - Push the feature branch to GitHub (`git push -u origin <branch-name>`).
+6. **Cloudflare Deployment:** Deploy the build to Cloudflare Workers (`npx wrangler deploy`) and verify the live endpoint (`https://brickwork.stefanvandyk3.workers.dev`).
+7. **Manual Merge Authority:** The user merges the branch into `main` manually on GitHub. The agent must never merge into `main` during feature release cycles.
+8. **Release Log:** Update the Release Log in [`docs/RELEASE_GUIDELINES.md`](./docs/RELEASE_GUIDELINES.md) with the version, commit hash, date, and description.
