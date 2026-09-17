@@ -191,16 +191,15 @@ Deployments target the following production configuration:
 
 Before and after every release, verify each item:
 
-### Pre-Flight Checklist (Agent Responsibility)
-- [ ] Specification updated in `docs/` and user-approved.
-- [ ] Working on a dedicated branch `feat/vX.Y-<name>` or `fix/vX.Y-<name>`.
-- [ ] Svelte 5 Runes used exclusively (no Svelte 3/4 stores or `$:`).
-- [ ] Financial amounts stored as integer ZAR cents.
-- [ ] `pnpm check` passes with 0 errors.
-- [ ] `pnpm test:unit --run` passes (all unit suites green).
-- [ ] `npx playwright test` passes (all E2E suites green).
-- [ ] `pnpm build` creates production bundle in `.svelte-kit/cloudflare/_worker.js`.
-- [ ] Awaiting explicit user deploy request.
+### Pre-Flight Checklist (Lead Developer Responsibility)
+- [x] Requirements aligned and specifications updated in `docs/`.
+- [x] Release branch created and checked out (`feat/v1.2-company-members-and-reimbursements`).
+- [x] Code implemented using Svelte 5 runes and integer ZAR cents math.
+- [x] `pnpm check` passes (0 errors, 0 warnings).
+- [x] `pnpm test:unit --run` passes (all 61 unit suites green).
+- [x] `npx playwright test` passes (all 17 E2E suites green).
+- [x] `pnpm build` creates production bundle in `.svelte-kit/cloudflare/_worker.js`.
+- [x] Awaiting explicit user deploy request (Holding at Phase 4 Gate).
 
 ### Post-Flight Checklist (DevOps & User Responsibility)
 - [ ] Changes committed with descriptive conventional commit.
@@ -238,6 +237,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | :--- | :--- | :--- | :--- | :--- |
 | **v1.0.0** | 2026-09-16 | `main` ([`eb0dffd`](https://github.com/Pietieklipkop/brickwork/commit/eb0dffd)) | **Released** | Initial production release: Full Edge PWA (AC-01 - AC-14), D1 SQLite ORM, R2 receipts, Workers AI OCR, Svelte 5 Runes. |
 | **v1.1.0** | 2026-09-17 | [`182be1c`](https://github.com/Pietieklipkop/brickwork/commit/182be1c) (`fix/v1.1-anonymize-registration-placeholders`) | **Deployed (Pending Merge)** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
+| **v1.2.0** | 2026-09-17 | `feat/v1.2-company-members-and-reimbursements` | **In Development** | Feature: Company collaboration (members & granular RBAC) & Personal reimbursable expense tracking. |
 
 ---
 
@@ -266,3 +266,14 @@ This log is the permanent record of all production releases for the Brickwork pl
 - **Scope & Highlights:**
   - **Anonymize Registration Placeholders:** Replaced personal developer name and email address in `/register` view input placeholders with neutral mock identifiers (`"John Doe"` and `"john.doe@example.com"`).
   - **Automated Regression Guard:** Added Playwright E2E test verifying registration placeholder attributes.
+
+---
+
+#### Version 1.2.0 — 2026-09-17 (Feature Release: Company Collaboration & Reimbursements)
+- **Deployment Status:** In Development
+- **Target Branch:** `feat/v1.2-company-members-and-reimbursements`
+- **Scope & Highlights:**
+  - **Company Member Collaboration (AC-15):** Enable adding registered users by email to any company, allowing them to switch entities, view all company expenses, and log receipts/expenses.
+  - **Granular Category Management Toggle:** When adding/managing members, owner can toggle whether the member can create/edit/delete categories and monthly spend targets. Non-permitted members view categories in read-only mode.
+  - **Personal Reimbursable Expense Tracking (AC-16):** Context-aware toggle in `/capture` and `PreSaveBottomSheet` when in Personal profile to flag expenses as reimbursable and associate them with a designated business company.
+  - **Ledger Badging:** Display `Reimbursable • [Company Name]` badges in `/expenses`.

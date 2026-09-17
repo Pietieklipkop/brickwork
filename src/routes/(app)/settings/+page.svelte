@@ -38,6 +38,13 @@
 	let editCatColor = $state('#0B2240');
 	let isUpdatingCat = $state(false);
 
+	// Member Management State (AC-15)
+	let newMemberEmail = $state('');
+	let newMemberCanManageCategories = $state(false);
+	let isAddingMember = $state(false);
+	let memberError = $state('');
+	let memberSuccess = $state('');
+
 	const PRESET_COLORS = [
 		'#0B2240', '#10B981', '#0284C7', '#F59E0B', '#8B5CF6', '#EC4899', '#64748B', '#E11D48'
 	];
@@ -241,6 +248,90 @@
 			alert(r?.error || 'Cannot delete this category.');
 		}
 	}
+
+	async function handleAddMember(e: Event) {
+		e.preventDefault();
+		if (!newMemberEmail.trim()) return;
+		isAddingMember = true;
+		memberError = '';
+		memberSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('email', newMemberEmail.trim());
+		form.append('canManageCategories', String(newMemberCanManageCategories));
+
+		try {
+			const res = await fetch('/settings?/addMember', {
+				method: 'POST',
+				body: form
+			});
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				memberSuccess = `Collaborator ${newMemberEmail} added successfully!`;
+				newMemberEmail = '';
+				newMemberCanManageCategories = false;
+				await invalidateAll();
+			} else {
+				memberError = result?.data?.error || 'Failed to add collaborator. Verify that the user has an existing Brickwork account.';
+			}
+		} catch (err: any) {
+			memberError = err?.message || 'Network error.';
+		} finally {
+			isAddingMember = false;
+		}
+	}
+
+	async function handleRemoveMember(memberId: string) {
+		if (!confirm('Are you sure you want to remove this member from the company?')) return;
+		memberError = '';
+		memberSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('memberId', memberId);
+
+		try {
+			const res = await fetch('/settings?/removeMember', {
+				method: 'POST',
+				body: form
+			});
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				memberSuccess = 'Member removed successfully.';
+				await invalidateAll();
+			} else {
+				memberError = result?.data?.error || 'Failed to remove member.';
+			}
+		} catch (err: any) {
+			memberError = err?.message || 'Network error.';
+		}
+	}
+
+	async function handleToggleMemberPermission(memberId: string, currentPermission: boolean) {
+		memberError = '';
+		memberSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('memberId', memberId);
+		form.append('canManageCategories', String(!currentPermission));
+
+		try {
+			const res = await fetch('/settings?/toggleMemberCategoryPermission', {
+				method: 'POST',
+				body: form
+			});
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				await invalidateAll();
+			} else {
+				memberError = result?.data?.error || 'Failed to update member permission.';
+			}
+		} catch (err: any) {
+			memberError = err?.message || 'Network error.';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -339,6 +430,10 @@
 									<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
 										Personal
 									</span>
+								{:else if !comp.isOwner}
+									<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+										Collaborator
+									</span>
 								{/if}
 								{#if comp.id === data.activeCompany.id}
 									<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
@@ -350,7 +445,7 @@
 					</div>
 
 					<div class="flex items-center space-x-1">
-						{#if !comp.isPersonal}
+						{#if !comp.isPersonal && comp.isOwner}
 							<button
 								type="button"
 								onclick={() => {
@@ -417,14 +512,23 @@
 				</p>
 			</div>
 
-			<button
-				type="button"
-				onclick={() => (showAddCategory = true)}
-				class="btn btn-sm bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold"
-			>
-				+ Add Category
-			</button>
+			{#if data.activeCompany.canManageCategories}
+				<button
+					type="button"
+					onclick={() => (showAddCategory = true)}
+					class="btn btn-sm bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold"
+				>
+					+ Add Category
+				</button>
+			{/if}
 		</div>
+
+		{#if !data.activeCompany.canManageCategories}
+			<div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-800 dark:text-amber-300 flex items-center space-x-2">
+				<svg class="w-4 h-4 shrink-0 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+				<span>View-only: Category & budget target management permission is not granted for your role. Contact the company owner.</span>
+			</div>
+		{/if}
 
 		{#if catError}
 			<div class="alert alert-error text-xs rounded-xl p-3">
@@ -433,7 +537,7 @@
 		{/if}
 
 		<!-- Add Category Form Dialog -->
-		{#if showAddCategory}
+		{#if showAddCategory && data.activeCompany.canManageCategories}
 			<form onsubmit={handleCreateCategory} class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
 				<h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
 					New Category for {data.activeCompany.name}
@@ -512,36 +616,176 @@
 							{centsToZar(cat.monthlyTargetCents)} / mo
 						</span>
 
-						<div class="flex items-center space-x-1">
-							<button
-								type="button"
-								onclick={() => startEditCat(cat)}
-								class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-								aria-label="Edit {cat.name}"
-							>
-								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-									<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-								</svg>
-							</button>
+						{#if data.activeCompany.canManageCategories}
+							<div class="flex items-center space-x-1">
+								<button
+									type="button"
+									onclick={() => startEditCat(cat)}
+									class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+									aria-label="Edit {cat.name}"
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+										<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+									</svg>
+								</button>
 
-							<button
-								type="button"
-								onclick={() => handleDeleteCategory(cat.id)}
-								class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
-								aria-label="Delete {cat.name}"
-							>
-								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<polyline points="3 6 5 6 21 6"></polyline>
-									<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-								</svg>
-							</button>
-						</div>
+								<button
+									type="button"
+									onclick={() => handleDeleteCategory(cat.id)}
+									class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
+									aria-label="Delete {cat.name}"
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+									</svg>
+								</button>
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/each}
 		</div>
 	</section>
+
+	<!-- 4. Team Collaboration & Members (AC-15) -->
+	{#if !data.activeCompany.isPersonal}
+		<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+			<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+				<div>
+					<h2 class="text-base font-bold text-slate-900 dark:text-white">
+						Company Members & Collaboration ({data.activeCompany.name})
+					</h2>
+					<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+						Add registered team members to capture expenses and view finances for this company (AC-15).
+					</p>
+				</div>
+			</div>
+
+			{#if memberError}
+				<div class="alert alert-error text-xs rounded-xl p-3">
+					<span>{memberError}</span>
+				</div>
+			{/if}
+
+			{#if memberSuccess}
+				<div class="alert alert-success text-xs rounded-xl p-3">
+					<span>{memberSuccess}</span>
+				</div>
+			{/if}
+
+			{#if data.activeCompany.isOwner}
+				<!-- Add Member Form -->
+				<form onsubmit={handleAddMember} class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+					<h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+						Add Collaborator by Email
+					</h3>
+
+					<div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+						<div class="flex-1 w-full">
+							<input
+								type="email"
+								required
+								bind:value={newMemberEmail}
+								placeholder="colleague@company.co.za"
+								class="input input-bordered input-sm w-full h-10 text-xs"
+							/>
+						</div>
+
+						<div class="flex items-center space-x-2 shrink-0 py-1">
+							<input
+								id="can-manage-cat-toggle"
+								type="checkbox"
+								bind:checked={newMemberCanManageCategories}
+								class="toggle toggle-primary toggle-sm"
+							/>
+							<label for="can-manage-cat-toggle" class="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+								Allow managing categories & targets
+							</label>
+						</div>
+
+						<button
+							type="submit"
+							disabled={isAddingMember}
+							class="btn btn-sm h-10 bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold shrink-0 w-full sm:w-auto px-4"
+						>
+							{#if isAddingMember}
+								<span class="loading loading-spinner loading-xs"></span>
+							{/if}
+							<span>+ Add Member</span>
+						</button>
+					</div>
+					<p class="text-[11px] text-slate-500">Note: The user must already have a registered account on Brickwork.</p>
+				</form>
+			{:else}
+				<div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 flex items-center space-x-2">
+					<svg class="w-4 h-4 shrink-0 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+					<span>You are collaborating on this company as a Member. Only the company owner can add or remove team members.</span>
+				</div>
+			{/if}
+
+			<!-- Members List -->
+			<div class="divide-y divide-slate-100 dark:divide-slate-800">
+				{#if data.members.length === 0}
+					<div class="py-4 text-center text-xs text-slate-400">
+						No external members added yet. Add a colleague using the form above.
+					</div>
+				{:else}
+					{#each data.members as member (member.id)}
+						<div class="py-3 flex items-center justify-between gap-3">
+							<div class="flex items-center space-x-3">
+								<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs uppercase">
+									{member.userName.charAt(0) || 'U'}
+								</div>
+								<div>
+									<div class="flex items-center space-x-2">
+										<span class="text-sm font-bold text-slate-900 dark:text-white">{member.userName}</span>
+										<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+											Member
+										</span>
+									</div>
+									<p class="text-xs text-slate-500">{member.userEmail}</p>
+								</div>
+							</div>
+
+							<div class="flex items-center space-x-3">
+								{#if data.activeCompany.isOwner}
+									<!-- Owner can toggle permission -->
+									<button
+										type="button"
+										onclick={() => handleToggleMemberPermission(member.id, member.canManageCategories)}
+										class="px-2 py-1 rounded text-xs font-semibold flex items-center space-x-1.5 border transition-colors {member.canManageCategories ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:border-emerald-800' : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:border-slate-700'}"
+										title="Click to toggle category management permission"
+									>
+										<span class="w-2 h-2 rounded-full {member.canManageCategories ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
+										<span>{member.canManageCategories ? 'Can Manage Categories' : 'Read-Only Categories'}</span>
+									</button>
+
+									<button
+										type="button"
+										onclick={() => handleRemoveMember(member.id)}
+										class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
+										aria-label="Remove {member.userName}"
+									>
+										<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<polyline points="3 6 5 6 21 6"></polyline>
+											<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+										</svg>
+									</button>
+								{:else}
+									<span class="px-2 py-1 rounded text-xs font-semibold {member.canManageCategories ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50' : 'bg-slate-100 text-slate-600 dark:bg-slate-800'}">
+										{member.canManageCategories ? 'Can Manage Categories' : 'Read-Only Categories'}
+									</span>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				{/if}
+			</div>
+		</section>
+	{/if}
+
 
 	<!-- 4. User Profile & Sign Out -->
 	<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">

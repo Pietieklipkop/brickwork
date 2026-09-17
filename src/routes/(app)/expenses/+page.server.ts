@@ -5,6 +5,7 @@ import { expense as expenseTable, category as categoryTable, company as companyT
 import { deleteReceiptFromR2 } from '$lib/server/storage';
 import { calculateCycleWindow, formatSastIsoDate } from '$lib/domain/billing';
 import { and, eq, gte, lte, like, desc, inArray } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 
 export const load: PageServerLoad = async ({ parent, url, platform }) => {
 	const { user, companies, activeCompany } = await parent();
@@ -68,9 +69,12 @@ export const load: PageServerLoad = async ({ parent, url, platform }) => {
 		conditions.push(eq(expenseTable.categoryId, categoryId));
 	}
 
+	const reimbursableComp = alias(companyTable, 'reimbursable_comp');
+
 	const expenses = await db
 		.select({
 			id: expenseTable.id,
+			userId: expenseTable.userId,
 			vendorName: expenseTable.vendorName,
 			amountCents: expenseTable.amountCents,
 			transactionDate: expenseTable.transactionDate,
@@ -79,10 +83,14 @@ export const load: PageServerLoad = async ({ parent, url, platform }) => {
 			categoryId: expenseTable.categoryId,
 			categoryName: categoryTable.name,
 			categoryColor: categoryTable.colorHex,
-			companyId: expenseTable.companyId
+			companyId: expenseTable.companyId,
+			isReimbursable: expenseTable.isReimbursable,
+			reimbursableCompanyId: expenseTable.reimbursableCompanyId,
+			reimbursableCompanyName: reimbursableComp.name
 		})
 		.from(expenseTable)
 		.leftJoin(categoryTable, eq(expenseTable.categoryId, categoryTable.id))
+		.leftJoin(reimbursableComp, eq(expenseTable.reimbursableCompanyId, reimbursableComp.id))
 		.where(and(...conditions))
 		.orderBy(desc(expenseTable.transactionDate), desc(expenseTable.createdAt));
 

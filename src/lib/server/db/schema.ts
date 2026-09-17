@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { user } from './auth.schema';
 
 // Re-export all authentication tables and relations
@@ -30,6 +30,40 @@ export const company = sqliteTable(
 			.notNull()
 	},
 	(table) => [index('company_owner_idx').on(table.ownerUserId)]
+);
+
+/**
+ * Company Member / Collaborator Table
+ * Allows company owners to add registered members to their company.
+ * Members can view and add expenses; canManageCategories controls category & target editing rights.
+ */
+export const companyMember = sqliteTable(
+	'company_member',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		companyId: text('company_id')
+			.notNull()
+			.references(() => company.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		role: text('role').notNull().default('member'),
+		canManageCategories: integer('can_manage_categories', { mode: 'boolean' }).notNull().default(false),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.$onUpdate(() => new Date())
+			.notNull()
+	},
+	(table) => [
+		uniqueIndex('company_member_unique_idx').on(table.companyId, table.userId),
+		index('company_member_user_idx').on(table.userId),
+		index('company_member_company_idx').on(table.companyId)
+	]
 );
 
 /**
@@ -112,6 +146,8 @@ export const expense = sqliteTable(
 		receiptImageKey: text('receipt_image_key'), // Cloudflare R2 Object Key
 		rawAiExtraction: text('raw_ai_extraction'), // JSON snapshot of Workers AI OCR output
 		notes: text('notes'),
+		isReimbursable: integer('is_reimbursable', { mode: 'boolean' }).notNull().default(false),
+		reimbursableCompanyId: text('reimbursable_company_id').references(() => company.id, { onDelete: 'set null' }),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),
@@ -123,7 +159,8 @@ export const expense = sqliteTable(
 	(table) => [
 		index('idx_expense_company_date').on(table.companyId, table.transactionDate),
 		index('idx_expense_category_date').on(table.categoryId, table.transactionDate),
-		index('idx_expense_user_date').on(table.userId, table.transactionDate)
+		index('idx_expense_user_date').on(table.userId, table.transactionDate),
+		index('idx_expense_reimbursable').on(table.isReimbursable, table.reimbursableCompanyId)
 	]
 );
 
@@ -158,7 +195,19 @@ export const companyRelations = relations(company, ({ one, many }) => ({
 	}),
 	categories: many(category),
 	paymentAccounts: many(paymentAccount),
-	expenses: many(expense)
+	expenses: many(expense),
+	members: many(companyMember)
+}));
+
+export const companyMemberRelations = relations(companyMember, ({ one }) => ({
+	company: one(company, {
+		fields: [companyMember.companyId],
+		references: [company.id]
+	}),
+	user: one(user, {
+		fields: [companyMember.userId],
+		references: [user.id]
+	})
 }));
 
 export const categoryRelations = relations(category, ({ one, many }) => ({
@@ -193,6 +242,10 @@ export const expenseRelations = relations(expense, ({ one }) => ({
 	account: one(paymentAccount, {
 		fields: [expense.accountId],
 		references: [paymentAccount.id]
+	}),
+	reimbursableCompany: one(company, {
+		fields: [expense.reimbursableCompanyId],
+		references: [company.id]
 	})
 }));
 

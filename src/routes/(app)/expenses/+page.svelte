@@ -344,13 +344,18 @@
 
 						<!-- Details -->
 						<div class="min-w-0 space-y-1">
-							<div class="flex items-center space-x-2">
+							<div class="flex items-center space-x-2 flex-wrap gap-y-1">
 								<p class="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
 									{exp.vendorName}
 								</p>
 								{#if exp.receiptImageKey}
 									<span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
 										R2 Voucher
+									</span>
+								{/if}
+								{#if exp.isReimbursable}
+									<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-200 dark:border-amber-800">
+										Reimbursable {exp.reimbursableCompanyName ? `• ${exp.reimbursableCompanyName}` : ''}
 									</span>
 								{/if}
 							</div>

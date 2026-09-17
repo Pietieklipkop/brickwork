@@ -21,6 +21,8 @@
 		categories: CategoryOption[];
 		paymentAccounts: AccountOption[];
 		isSaving?: boolean;
+		isPersonal?: boolean;
+		businessCompanies?: Array<{ id: string; name: string }>;
 		onsave: (expense: {
 			vendorName: string;
 			amountCents: number;
@@ -28,6 +30,8 @@
 			categoryId: string;
 			accountId?: string;
 			notes?: string;
+			isReimbursable?: boolean;
+			reimbursableCompanyId?: string;
 		}) => void;
 		oncancel: () => void;
 	}
@@ -38,6 +42,8 @@
 		categories = [],
 		paymentAccounts = [],
 		isSaving = false,
+		isPersonal = false,
+		businessCompanies = [],
 		onsave,
 		oncancel
 	}: Props = $props();
@@ -49,6 +55,8 @@
 	let categoryId = $state('');
 	let accountId = $state('');
 	let notes = $state('');
+	let isReimbursable = $state(false);
+	let reimbursableCompanyId = $state('');
 
 	$effect(() => {
 		vendorName = extractedData.vendorName || '';
@@ -56,6 +64,9 @@
 		transactionDate = extractedData.transactionDate || new Date().toISOString().split('T')[0];
 		categoryId = extractedData.suggestedCategoryId || categories[0]?.id || '';
 		accountId = paymentAccounts.find((a) => a.isDefault)?.id || paymentAccounts[0]?.id || '';
+		if (businessCompanies.length > 0 && !reimbursableCompanyId) {
+			reimbursableCompanyId = businessCompanies[0].id;
+		}
 	});
 
 	// Validation
@@ -83,7 +94,9 @@
 			transactionDate,
 			categoryId,
 			accountId: accountId || undefined,
-			notes: notes.trim() || undefined
+			notes: notes.trim() || undefined,
+			isReimbursable: isPersonal ? isReimbursable : false,
+			reimbursableCompanyId: isPersonal && isReimbursable ? reimbursableCompanyId : undefined
 		});
 	}
 </script>
@@ -249,6 +262,42 @@
 					class="input input-bordered w-full h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
 				/>
 			</div>
+
+			<!-- Reimbursable Section (AC-16) -->
+			{#if isPersonal && businessCompanies.length > 0}
+				<div class="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 space-y-3">
+					<div class="flex items-center justify-between">
+						<div>
+							<span class="text-sm font-bold text-slate-900 dark:text-white">Reimbursable Expense</span>
+							<p class="text-xs text-slate-500 dark:text-slate-400">Claim back this personal out-of-pocket expense from a business entity.</p>
+						</div>
+						<input
+							type="checkbox"
+							id="review-reimbursable"
+							bind:checked={isReimbursable}
+							class="toggle toggle-warning"
+						/>
+					</div>
+
+					{#if isReimbursable}
+						<div>
+							<label for="review-reimbursable-company" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+								Reimburse from Company <span class="text-rose-500">*</span>
+							</label>
+							<select
+								id="review-reimbursable-company"
+								bind:value={reimbursableCompanyId}
+								required={isReimbursable}
+								class="select select-bordered select-sm w-full h-10 text-xs bg-white dark:bg-slate-800"
+							>
+								{#each businessCompanies as bComp}
+									<option value={bComp.id}>{bComp.name}</option>
+								{/each}
+							</select>
+						</div>
+					{/if}
+				</div>
+			{/if}
 
 			<!-- Action Buttons -->
 			<div class="pt-4 flex flex-col sm:flex-row items-center gap-3">

@@ -1,9 +1,38 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
-import { user as userTable, company as companyTable, category as categoryTable, expense as expenseTable } from '$lib/server/db/schema';
+import {
+	user as userTable,
+	company as companyTable,
+	category as categoryTable,
+	expense as expenseTable,
+	companyMember as companyMemberTable
+} from '$lib/server/db/schema';
 import { seedBusinessCompany } from '$lib/server/db/seed';
 import { eq, and } from 'drizzle-orm';
+
+async function checkCanManageCategories(db: ReturnType<typeof getDb>, companyId: string, userId: string): Promise<boolean> {
+	const [comp] = await db
+		.select()
+		.from(companyTable)
+		.where(eq(companyTable.id, companyId))
+		.limit(1);
+	if (comp && comp.ownerUserId === userId) {
+		return true;
+	}
+	const [membership] = await db
+		.select()
+		.from(companyMemberTable)
+		.where(
+			and(
+				eq(companyMemberTable.companyId, companyId),
+				eq(companyMemberTable.userId, userId),
+				eq(companyMemberTable.canManageCategories, true)
+			)
+		)
+		.limit(1);
+	return Boolean(membership);
+}
 
 export const load: PageServerLoad = async ({ parent, platform }) => {
 	const { user, companies, activeCompany } = await parent();
@@ -13,7 +42,8 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 			user,
 			companies,
 			activeCompany,
-			categories: []
+			categories: [],
+			members: []
 		};
 	}
 
@@ -23,11 +53,41 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 		.from(categoryTable)
 		.where(eq(categoryTable.companyId, activeCompany.id));
 
+	let members: Array<{
+		id: string;
+		userId: string;
+		role: string;
+		canManageCategories: boolean;
+		userName: string;
+		userEmail: string;
+	}> = [];
+
+	if (!activeCompany.isPersonal) {
+		const memberRows = await db
+			.select({
+				id: companyMemberTable.id,
+				userId: companyMemberTable.userId,
+				role: companyMemberTable.role,
+				canManageCategories: companyMemberTable.canManageCategories,
+				userName: userTable.name,
+				userEmail: userTable.email
+			})
+			.from(companyMemberTable)
+			.innerJoin(userTable, eq(companyMemberTable.userId, userTable.id))
+			.where(eq(companyMemberTable.companyId, activeCompany.id));
+
+		members = memberRows.map((m) => ({
+			...m,
+			canManageCategories: Boolean(m.canManageCategories)
+		}));
+	}
+
 	return {
 		user,
 		companies,
 		activeCompany,
-		categories
+		categories,
+		members
 	};
 };
 
@@ -150,6 +210,156 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
+	addMember: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const companyId = String(data.get('companyId') || '');
+		const email = String(data.get('email') || '').trim().toLowerCase();
+		const canManageCategories = data.get('canManageCategories') === 'on' || data.get('canManageCategories') === 'true';
+
+		if (!companyId || !email) {
+			return fail(400, { error: 'Company and collaborator email are required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the company owner can add collaborators.' });
+		}
+
+		if (comp.isPersonal) {
+			return fail(400, { error: 'Cannot add collaborators to a Personal profile.' });
+		}
+
+		// Look up registered user by email
+		const [targetUser] = await db
+			.select()
+			.from(userTable)
+			.where(eq(userTable.email, email))
+			.limit(1);
+
+		if (!targetUser) {
+			return fail(404, {
+				error: `No registered user found with email "${email}". Please ensure they have registered on Brickwork first.`
+			});
+		}
+
+		if (targetUser.id === locals.user.id) {
+			return fail(400, { error: 'You are already the owner of this company.' });
+		}
+
+		// Check if already member
+		const [existingMember] = await db
+			.select()
+			.from(companyMemberTable)
+			.where(and(eq(companyMemberTable.companyId, companyId), eq(companyMemberTable.userId, targetUser.id)))
+			.limit(1);
+
+		if (existingMember) {
+			return fail(400, { error: `User ${email} is already a collaborator on this company.` });
+		}
+
+		await db.insert(companyMemberTable).values({
+			id: crypto.randomUUID(),
+			companyId,
+			userId: targetUser.id,
+			role: 'member',
+			canManageCategories
+		});
+
+		return { success: true, memberAdded: true };
+	},
+
+	removeMember: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const memberId = String(data.get('memberId') || '');
+		const companyId = String(data.get('companyId') || '');
+
+		if (!memberId || !companyId) {
+			return fail(400, { error: 'Member ID and Company ID required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be company owner
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the company owner can remove members.' });
+		}
+
+		await db
+			.delete(companyMemberTable)
+			.where(and(eq(companyMemberTable.id, memberId), eq(companyMemberTable.companyId, companyId)));
+
+		return { success: true, memberRemoved: true };
+	},
+
+	toggleMemberCategoryPermission: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const memberId = String(data.get('memberId') || '');
+		const companyId = String(data.get('companyId') || '');
+		const canManageCategories = data.get('canManageCategories') === 'true' || data.get('canManageCategories') === 'on';
+
+		if (!memberId || !companyId) {
+			return fail(400, { error: 'Member ID and Company ID required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be company owner
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the company owner can adjust permissions.' });
+		}
+
+		await db
+			.update(companyMemberTable)
+			.set({ canManageCategories, updatedAt: new Date() })
+			.where(and(eq(companyMemberTable.id, memberId), eq(companyMemberTable.companyId, companyId)));
+
+		return { success: true };
+	},
+
 	createCategory: async ({ request, locals, platform }) => {
 		if (!locals.user) {
 			throw redirect(303, '/login');
@@ -170,6 +380,11 @@ export const actions: Actions = {
 
 		if (platform?.env?.DB) {
 			const db = getDb(platform.env.DB);
+			const allowed = await checkCanManageCategories(db, companyId, locals.user.id);
+			if (!allowed) {
+				return fail(403, { error: 'You do not have permission to manage categories for this company.' });
+			}
+
 			await db.insert(categoryTable).values({
 				id: crypto.randomUUID(),
 				companyId,
@@ -202,6 +417,21 @@ export const actions: Actions = {
 
 		if (platform?.env?.DB) {
 			const db = getDb(platform.env.DB);
+			const [cat] = await db
+				.select()
+				.from(categoryTable)
+				.where(eq(categoryTable.id, categoryId))
+				.limit(1);
+
+			if (!cat) {
+				return fail(404, { error: 'Category not found.' });
+			}
+
+			const allowed = await checkCanManageCategories(db, cat.companyId, locals.user.id);
+			if (!allowed) {
+				return fail(403, { error: 'You do not have permission to manage categories for this company.' });
+			}
+
 			await db
 				.update(categoryTable)
 				.set({
@@ -230,6 +460,20 @@ export const actions: Actions = {
 
 		if (platform?.env?.DB) {
 			const db = getDb(platform.env.DB);
+			const [cat] = await db
+				.select()
+				.from(categoryTable)
+				.where(eq(categoryTable.id, categoryId))
+				.limit(1);
+
+			if (!cat) {
+				return fail(404, { error: 'Category not found.' });
+			}
+
+			const allowed = await checkCanManageCategories(db, cat.companyId, locals.user.id);
+			if (!allowed) {
+				return fail(403, { error: 'You do not have permission to manage categories for this company.' });
+			}
 
 			// Check if any expenses are linked to this category
 			const linkedExpenses = await db

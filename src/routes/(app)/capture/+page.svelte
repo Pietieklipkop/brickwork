@@ -101,6 +101,8 @@
 		categoryId: string;
 		accountId?: string;
 		notes?: string;
+		isReimbursable?: boolean;
+		reimbursableCompanyId?: string;
 	}) {
 		isSaving = true;
 		saveError = '';
@@ -114,6 +116,12 @@
 		if (expense.notes) form.append('notes', expense.notes);
 		if (capturedFile) form.append('image', capturedFile);
 		form.append('rawAiExtraction', JSON.stringify(extractedData));
+		if (expense.isReimbursable) {
+			form.append('isReimbursable', 'true');
+			if (expense.reimbursableCompanyId) {
+				form.append('reimbursableCompanyId', expense.reimbursableCompanyId);
+			}
+		}
 
 		try {
 			const res = await fetch('/capture', {
@@ -177,13 +185,15 @@
 		{isProcessing}
 	/>
 
-	<!-- Pre-Save Review Bottom Sheet (AC-02) -->
+	<!-- Pre-Save Review Bottom Sheet (AC-02, AC-16) -->
 	{#if showReview}
 		<PreSaveBottomSheet
 			{extractedData}
 			{previewUrl}
 			categories={data.categories}
 			paymentAccounts={data.paymentAccounts}
+			isPersonal={data.activeCompany.isPersonal}
+			businessCompanies={data.companies.filter((c) => !c.isPersonal)}
 			{isSaving}
 			onsave={handleSaveExpense}
 			oncancel={handleCancelReview}

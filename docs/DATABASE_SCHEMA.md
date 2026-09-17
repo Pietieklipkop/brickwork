@@ -187,6 +187,20 @@ export const paymentAccounts = sqliteTable('payment_accounts', {
 }, (table) => ({
   companyIdx: index('idx_payment_accounts_company').on(table.companyId)
 }));
+
+export const companyMembers = sqliteTable('company_member', {
+  id: text('id').primaryKey(),
+  companyId: text('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text('role').notNull().default('member'),
+  canManageCategories: integer('can_manage_categories', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+}, (table) => ({
+  uniqueMemberIdx: uniqueIndex('company_member_unique_idx').on(table.companyId, table.userId),
+  userMemberIdx: index('company_member_user_idx').on(table.userId),
+  companyMemberIdx: index('company_member_company_idx').on(table.companyId)
+}));
 ```
 
 ### 3.3 Expense Records & Password Reset
@@ -203,12 +217,15 @@ export const expenses = sqliteTable('expenses', {
   transactionDate: text('transaction_date').notNull(), // ISO YYYY-MM-DD (SAST)
   receiptImageKey: text('receipt_image_key').notNull(), // R2 Object Key
   rawAiExtraction: text('raw_ai_extraction'), // JSON string snapshot of AI parsing
+  isReimbursable: integer('is_reimbursable', { mode: 'boolean' }).notNull().default(false),
+  reimbursableCompanyId: text('reimbursable_company_id').references(() => companies.id, { onDelete: 'set null' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
 }, (table) => ({
   companyDateIdx: index('idx_expenses_company_date').on(table.companyId, table.transactionDate),
   categoryDateIdx: index('idx_expenses_category_date').on(table.categoryId, table.transactionDate),
-  userDateIdx: index('idx_expenses_user_date').on(table.userId, table.transactionDate)
+  userDateIdx: index('idx_expenses_user_date').on(table.userId, table.transactionDate),
+  reimbursableIdx: index('idx_expense_reimbursable').on(table.isReimbursable, table.reimbursableCompanyId)
 }));
 
 export const passwordResetTokens = sqliteTable('password_reset_tokens', {

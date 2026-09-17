@@ -7,8 +7,9 @@ import { formatSastIsoDate } from '$lib/domain/billing';
 import { eq } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ parent }) => {
-	const { activeCompany, categories, paymentAccounts } = await parent();
+	const { companies, activeCompany, categories, paymentAccounts } = await parent();
 	return {
+		companies,
 		activeCompany,
 		categories,
 		paymentAccounts
@@ -31,6 +32,11 @@ export const actions: Actions = {
 		const notes = String(formData.get('notes') || '').trim() || null;
 		const rawAiExtraction = String(formData.get('rawAiExtraction') || '').trim() || null;
 		const imageFile = formData.get('image') as File | null;
+		const isReimbursableRaw = formData.get('isReimbursable');
+		const isReimbursable = isReimbursableRaw === 'true' || isReimbursableRaw === 'on';
+		const reimbursableCompanyId = isReimbursable
+			? String(formData.get('reimbursableCompanyId') || '').trim() || null
+			: null;
 
 		// Validation (AC-11)
 		if (!vendorName) {
@@ -110,7 +116,9 @@ export const actions: Actions = {
 			transactionDate,
 			receiptImageKey,
 			rawAiExtraction,
-			notes
+			notes,
+			isReimbursable,
+			reimbursableCompanyId
 		});
 
 		throw redirect(303, '/dashboard');

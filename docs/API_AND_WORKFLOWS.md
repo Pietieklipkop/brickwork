@@ -87,18 +87,19 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
 ### 3.1 Expense Actions (`/capture` and `/expenses/+page.server.ts`)
 
 #### `create` Action
-1. Validates form data: `vendorName`, `amountCents`, `transactionDate`, `companyId`, `categoryId`, `accountId`, `receiptImageBase64`.
-2. Generates unique expense ID `exp_${nanoid()}` and R2 key:
+1. Validates form data: `vendorName`, `amountCents`, `transactionDate`, `companyId`, `categoryId`, `accountId`, `receiptImageBase64`, `isReimbursable`, `reimbursableCompanyId`.
+2. If `isReimbursable` is true, validates that active company is Personal and `reimbursableCompanyId` references an active business company.
+3. Generates unique expense ID `exp_${nanoid()}` and R2 key:
    ```text
    receipts/${companyId}/${year}/${month}/${expenseId}.jpg
    ```
-3. Writes binary buffer to Cloudflare R2 via `platform.env.RECEIPTS_BUCKET.put()`.
-4. Inserts row into D1 `expenses` table.
-5. Redirects to `/` with success toast notification.
+4. Writes binary buffer to Cloudflare R2 via `platform.env.RECEIPTS_BUCKET.put()`.
+5. Inserts row into D1 `expenses` table.
+6. Redirects to `/dashboard` with success notification.
 
 #### `update` Action
 1. Validates user ownership or company access.
-2. Updates editable fields (`vendorName`, `amountCents`, `transactionDate`, `categoryId`, `accountId`) in D1.
+2. Updates editable fields (`vendorName`, `amountCents`, `transactionDate`, `categoryId`, `accountId`, `isReimbursable`, `reimbursableCompanyId`) in D1.
 
 #### `delete` Action
 1. Retrieves target expense from D1 to get `receiptImageKey`.
@@ -107,14 +108,17 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
 
 ---
 
-### 3.2 Company & Category Actions (`/manage/+page.server.ts`)
+### 3.2 Company & Category Actions (`/manage/+page.server.ts` & `/settings/+page.server.ts`)
 
 - `createCompany`: Main Member only. Creates company record and seeds default starter categories and default payment account.
-- `updateCompany`: Renames company. Personal company cannot be renamed or deleted.
-- `deleteCompany`: Main Member only. Cascades deletion to linked categories, accounts, and expenses (with corresponding R2 object cleanup).
-- `createCategory`: Adds category with initial monthly spend target.
-- `updateCategory`: Updates category name, color, and `monthlyTargetCents`.
-- `deleteCategory`: Soft checks that no historical expenses reference the category before deletion.
+- `updateCompany`: Renames company (Creator/Owner only). Personal company cannot be renamed or deleted.
+- `deleteCompany`: Creator/Owner only. Cascades deletion to linked categories, accounts, members, and expenses (with corresponding R2 object cleanup).
+- `createCategory`: Creator/Owner OR member with `canManageCategories = true`. Adds category with initial monthly spend target.
+- `updateCategory`: Creator/Owner OR member with `canManageCategories = true`. Updates category name, color, and `monthlyTargetCents`.
+- `deleteCategory`: Creator/Owner OR member with `canManageCategories = true`. Soft checks that no historical expenses reference the category before deletion.
+- `addCompanyMember`: Creator/Owner only. Accepts `email` and `canManageCategories`. Verifies registered user exists and creates `company_member` link.
+- `removeCompanyMember`: Creator/Owner only. Accepts `memberId` and revokes company access.
+- `toggleMemberCategoryPermission`: Creator/Owner only. Updates `canManageCategories` flag for target member.
 - `createPaymentAccount`: Adds account (e.g. "FNB Credit Card").
 - `setDefaultPaymentAccount`: Sets target account `isDefault = true` and unsets other accounts for the company.
 
@@ -124,7 +128,7 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
 
 - `updateSettings`:
   - `monthStartDay`: Integer 1–28. Validates bounds; immediately recalculates active cycle on next dashboard load.
-  - `defaultCompanyId`: References valid company ID owned by user.
+  - `defaultCompanyId`: References valid company ID owned or collaborated on by user.
 
 ---
 

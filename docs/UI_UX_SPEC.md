@@ -121,12 +121,18 @@ Fixed Bottom App Bar with persistent tabs:
 │  Payment Account*                            │
 │  [ FNB Business Cheque (Default)           ▼]│
 │                                              │
+│  (If Entity is Personal):                    │
+│  [x] Reimbursable Expense                    │
+│  Reimburse from Company:                     │
+│  [ Apex Consulting (Pty) Ltd               ▼]│
+│                                              │
 │  [ ✅ Save Expense ]    [ ❌ Retake / Discard ]│
 └──────────────────────────────────────────────┘
 ```
 - Every field is editable before saving.
 - Category defaults to the AI prediction but can be changed with one tap.
 - Payment account automatically defaults to the selected company's default account.
+- **Personal Reimbursable Toggle**: Only visible when active profile is Personal. Allows designating which business entity owes reimbursement for personal out-of-pocket expenses.
 - Clicking **Save Expense** uploads image to Cloudflare R2 and commits the expense record to D1.
 
 ---
@@ -142,6 +148,7 @@ Fixed Bottom App Bar with persistent tabs:
 - **Expense Card**:
   - Vendor name & transaction date.
   - Payment account name & Category badge.
+  - **Reimbursable Badge**: If `is_reimbursable`, displays a prominent pill badge: `Reimbursable • [Company Name]` (with amber/emerald tint).
   - ZAR amount in bold.
   - Receipt thumbnail badge (tap to view full image in modal).
   - Quick action menu: Edit & Delete.
@@ -165,11 +172,19 @@ Fixed Bottom App Bar with persistent tabs:
 
 ---
 
-### 4.5 User Settings (`/settings`)
+### 4.5 User Settings & Company Collaboration (`/settings`)
 
 - **User Profile**: Name, email, role badge (`Main Member`).
 - **Month Cycle Start Day**: Numerical selector constrained between `1` and `28` (with preview explanation, e.g., *"Your month cycle runs from the 15th to the 14th of each month"*).
 - **Default Company**: Dropdown to set which company loads automatically on login/dashboard.
+- **Company Collaboration & Members**:
+  - For company owners:
+    - Add collaborator by email.
+    - Permission toggle: *"Allow member to manage categories & spend targets"*.
+    - Collaborator list displaying member name, email, permissions badge, and `Remove` action button.
+  - For invited members:
+    - Member list is view-only.
+    - Category & spend target modification is restricted unless the owner enabled the category management permission toggle. If restricted, a clear banner indicates: *"View-only: Category management permission not granted by company owner."*
 - **Password Reset**: Option to trigger a password reset email to registered address.
 - **Sign Out**: Clears session cookie and redirects to `/auth/login`.
 
