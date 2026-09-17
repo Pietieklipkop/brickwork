@@ -237,7 +237,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | Version | Release Date | Branch / Commit | Status | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | **v1.0.0** | 2026-09-16 | `main` ([`eb0dffd`](https://github.com/Pietieklipkop/brickwork/commit/eb0dffd)) | **Released** | Initial production release: Full Edge PWA (AC-01 - AC-14), D1 SQLite ORM, R2 receipts, Workers AI OCR, Svelte 5 Runes. |
-| **v1.1.0** | 2026-09-17 | `fix/v1.1-anonymize-registration-placeholders` | **In Development** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
+| **v1.1.0** | 2026-09-17 | [`182be1c`](https://github.com/Pietieklipkop/brickwork/commit/182be1c) (`fix/v1.1-anonymize-registration-placeholders`) | **Deployed (Pending Merge)** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
 
 ---
 
@@ -259,9 +259,10 @@ This log is the permanent record of all production releases for the Brickwork pl
 
 ---
 
-#### Version 1.1.0 — 2026-09-17 (Upcoming Feature & Fix Release)
-- **Deployment Status:** In Development
-- **Target Branch:** `fix/v1.1-anonymize-registration-placeholders`
+#### Version 1.1.0 — 2026-09-17 (Feature & Fix Release)
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `0b06d804-1d32-4a5b-a147-9af172118627`)
+- **Target Branch:** `fix/v1.1-anonymize-registration-placeholders` (Commit: `182be1c`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
-  - **Anonymize Registration Placeholders:** Replace all personal developer names and email addresses in the `/register` view placeholders with neutral, standard mock data (`"John Doe"` and `"john.doe@example.com"`).
-  - Additional fixes and features to be appended as specified by the user.
+  - **Anonymize Registration Placeholders:** Replaced personal developer name and email address in `/register` view input placeholders with neutral mock identifiers (`"John Doe"` and `"john.doe@example.com"`).
+  - **Automated Regression Guard:** Added Playwright E2E test verifying registration placeholder attributes.
