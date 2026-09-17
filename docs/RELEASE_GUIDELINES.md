@@ -237,7 +237,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | Version | Release Date | Branch / Commit | Status | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | **v1.0.0** | 2026-09-16 | `main` ([`eb0dffd`](https://github.com/Pietieklipkop/brickwork/commit/eb0dffd)) | **Released** | Initial production release: Full Edge PWA (AC-01 - AC-14), D1 SQLite ORM, R2 receipts, Workers AI OCR, Svelte 5 Runes. |
-| **v1.1.0** | 2026-09-17 | Pending (`feat/v1.1-...`) | **In Planning** | First incremental feature release (requirements pending user specification). |
+| **v1.1.0** | 2026-09-17 | `fix/v1.1-anonymize-registration-placeholders` | **In Development** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
 
 ---
 
@@ -259,8 +259,9 @@ This log is the permanent record of all production releases for the Brickwork pl
 
 ---
 
-#### Version 1.1.0 — 2026-09-17 (Upcoming Feature Release)
-- **Deployment Status:** Initialized / In Planning
-- **Target Branch:** To be created upon feature specification (`feat/v1.1-...`)
+#### Version 1.1.0 — 2026-09-17 (Upcoming Feature & Fix Release)
+- **Deployment Status:** In Development
+- **Target Branch:** `fix/v1.1-anonymize-registration-placeholders`
 - **Scope & Highlights:**
-  - To be populated upon specification of today's feature requirements.
+  - **Anonymize Registration Placeholders:** Replace all personal developer names and email addresses in the `/register` view placeholders with neutral, standard mock data (`"John Doe"` and `"john.doe@example.com"`).
+  - Additional fixes and features to be appended as specified by the user.

@@ -177,7 +177,14 @@ Fixed Bottom App Bar with persistent tabs:
 
 ### 4.6 Authentication Flows (`/auth/*`)
 
-- `/auth/register`: Public registration for Main Member (Name, Email, Password). Auto-seeds personal company and defaults upon submission.
+- `/auth/register`: Public registration for Main Member (Name, Email, Password, Month Cycle Start Day). Auto-seeds personal company and defaults upon submission.
+  - Form input placeholders must strictly use anonymized dummy data:
+    - **Full Name**: `"John Doe"`
+    - **Email address**: `"john.doe@example.com"`
+    - **Password**: `"At least 8 characters"`
 - `/auth/login`: Email & Password credentials.
+  - **Email address**: `"name@company.co.za"`
+  - **Password**: `"••••••••"`
 - `/auth/forgot-password`: Email submission form triggering Cloudflare Email Send.
+  - **Email address**: `"name@company.co.za"`
 - `/auth/reset-password?token=...`: New password form validated against cryptographic token expiry.
