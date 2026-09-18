@@ -239,7 +239,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | **v1.0.0** | 2026-09-16 | `main` ([`eb0dffd`](https://github.com/Pietieklipkop/brickwork/commit/eb0dffd)) | **Released** | Initial production release: Full Edge PWA (AC-01 - AC-14), D1 SQLite ORM, R2 receipts, Workers AI OCR, Svelte 5 Runes. |
 | **v1.1.0** | 2026-09-17 | [`182be1c`](https://github.com/Pietieklipkop/brickwork/commit/182be1c) (`fix/v1.1-anonymize-registration-placeholders`) | **Deployed (Pending Merge)** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
 | **v1.2.0** | 2026-09-17 | [`7f7090e`](https://github.com/Pietieklipkop/brickwork/commit/7f7090e) (`feat/v1.2-company-members-and-reimbursements`) | **Deployed (Pending Merge)** | Feature: Company collaboration (members & granular RBAC) & Personal reimbursable expense tracking. |
-| **v1.3.0** | 2026-09-18 | `feat/v1.3-dashboard-charts-date-filter-upload` | **In Specification** | Feature: Dashboard date range filtering (AC-17), visual budget Donut/Pie charts (AC-18), and dedicated digital/email receipt file upload (AC-19). |
+| **v1.3.0** | 2026-09-18 | [`0fc80fb`](https://github.com/Pietieklipkop/brickwork/commit/0fc80fb) (`feat/v1.3-dashboard-charts-date-filter-upload`) | **Deployed (Pending Merge)** | Feature: Dashboard date range filtering (AC-17), visual budget Donut/Pie charts (AC-18), and dedicated digital/email receipt file upload (AC-19). |
 
 ---
 
@@ -284,11 +284,13 @@ This log is the permanent record of all production releases for the Brickwork pl
 ---
 
 #### Version 1.3.0 — 2026-09-18 (Feature Release: Dashboard Charts, Date Range Filter & Receipt Upload)
-- **Deployment Status:** In Specification / Development
-- **Target Branch:** `feat/v1.3-dashboard-charts-date-filter-upload`
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `f28c061e-d84e-4410-ab6d-8484b4d09c43`)
+- **Target Branch:** `feat/v1.3-dashboard-charts-date-filter-upload` (Commit: `0fc80fb`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
   - **Dashboard Date Range Filter (AC-17):** Filter trigger on the Active Cycle card allowing custom from/to date filtering. When active, displays a warning indicator color and updates all dashboard metrics.
   - **Budget Utilization Donut/Pie Chart (AC-18):** Replaces 3 static metric blocks with an SVG Donut/Pie chart visualizing Spend vs Remaining Budget vs Monthly Target with high-density badges, saving screen real estate.
   - **Digital/Email Receipt File Upload (AC-19):** Dedicated file upload dropzone in `/capture` for uploading receipt screenshots and invoices without requiring a live camera feed.
+
 
 
