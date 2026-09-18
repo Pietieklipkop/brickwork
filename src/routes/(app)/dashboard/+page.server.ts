@@ -5,20 +5,39 @@ import { calculateCycleWindow } from '$lib/domain/billing';
 import { calculateBudgetStatus } from '$lib/domain/currency';
 import { and, eq, gte, lte, desc } from 'drizzle-orm';
 
-export const load: PageServerLoad = async ({ parent, platform }) => {
+export const load: PageServerLoad = async ({ parent, platform, url }) => {
 	const { activeCompany, user, categories } = await parent();
 
+	const fromParam = url.searchParams.get('from');
+	const toParam = url.searchParams.get('to');
+
+	const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+	const isFiltered = Boolean(
+		fromParam &&
+			toParam &&
+			dateRegex.test(fromParam) &&
+			dateRegex.test(toParam) &&
+			fromParam <= toParam
+	);
+
 	const startDay = user.monthStartDay ?? 1;
-	const cycleWindow = calculateCycleWindow(startDay);
+	const defaultCycleWindow = calculateCycleWindow(startDay);
+
+	const cycleWindow = isFiltered
+		? { startDate: fromParam!, endDate: toParam! }
+		: defaultCycleWindow;
 
 	if (!platform?.env?.DB) {
 		return {
 			cycleWindow,
+			defaultCycleWindow,
+			isFiltered,
 			metrics: {
 				totalSpentCents: 0,
 				totalTargetCents: 0,
 				remainingCents: 0,
-				percentage: 0
+				percentage: 0,
+				status: 'normal' as const
 			},
 			categoryBudgets: [],
 			recentExpenses: []
@@ -27,7 +46,7 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 
 	const db = getDb(platform.env.DB);
 
-	// Fetch all expenses in the current billing cycle for active company
+	// Fetch all expenses in the active cycle or custom filtered window for active company
 	const cycleExpenses = await db
 		.select()
 		.from(expenseTable)
@@ -84,6 +103,8 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 
 	return {
 		cycleWindow,
+		defaultCycleWindow,
+		isFiltered,
 		metrics: {
 			totalSpentCents,
 			totalTargetCents,

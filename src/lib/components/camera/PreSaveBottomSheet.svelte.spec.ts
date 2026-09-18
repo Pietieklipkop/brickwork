@@ -21,7 +21,9 @@ describe('PreSaveBottomSheet.svelte (AC-16 Reimbursable Expenses)', () => {
 			extractedData: {
 				vendorName: 'Woolworths',
 				amountCents: 15000,
-				transactionDate: '2026-09-17'
+				transactionDate: '2026-09-17',
+				suggestedCategoryId: 'cat-1',
+				confidence: 1.0
 			},
 			categories: dummyCategories,
 			paymentAccounts: dummyAccounts,
@@ -39,7 +41,9 @@ describe('PreSaveBottomSheet.svelte (AC-16 Reimbursable Expenses)', () => {
 			extractedData: {
 				vendorName: 'Woolworths',
 				amountCents: 15000,
-				transactionDate: '2026-09-17'
+				transactionDate: '2026-09-17',
+				suggestedCategoryId: 'cat-1',
+				confidence: 1.0
 			},
 			categories: dummyCategories,
 			paymentAccounts: dummyAccounts,
@@ -59,7 +63,9 @@ describe('PreSaveBottomSheet.svelte (AC-16 Reimbursable Expenses)', () => {
 			extractedData: {
 				vendorName: 'Woolworths',
 				amountCents: 15000,
-				transactionDate: '2026-09-17'
+				transactionDate: '2026-09-17',
+				suggestedCategoryId: 'cat-1',
+				confidence: 1.0
 			},
 			categories: dummyCategories,
 			paymentAccounts: dummyAccounts,

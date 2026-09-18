@@ -152,3 +152,28 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
   2. Hashes new password and updates Better Auth account credential.
   3. Marks token as used (`usedAt = Date.now()`).
   4. Revokes existing user sessions to force fresh login.
+
+---
+
+### 3.5 Dashboard Date Range Filtering (`GET /dashboard?from=...&to=...`) (AC-17)
+
+- Query Parameters:
+  - `from`: Start date in `YYYY-MM-DD` format.
+  - `to`: End date in `YYYY-MM-DD` format.
+- Processing:
+  - If both `from` and `to` are present and valid, overrides default `calculateCycleWindow(monthStartDay)`.
+  - Aggregates `cycleExpenses` within `[from, to]` for active company.
+  - Returns `isFiltered: true`, active `startDate`, and `endDate` to client.
+  - Enables warning styling on the Filter trigger button (`btn-warning`).
+
+---
+
+### 3.6 Digital / Emailed Receipt File Upload (`/capture`) (AC-19)
+
+- Workflow:
+  1. User selects "Upload File" tab on `/capture` or drops file onto drag-and-drop zone.
+  2. Client-side validation checks file MIME type (`image/png`, `image/jpeg`, `image/webp`).
+  3. Image is downscaled to max 1600px via HTML5 Canvas and compressed to WebP (0.82 quality) in the browser.
+  4. Dispatches to `POST /api/extract` for Cloudflare Workers AI OCR extraction.
+  5. Advances to `PreSaveBottomSheet` populated with extracted metadata and local preview.
+

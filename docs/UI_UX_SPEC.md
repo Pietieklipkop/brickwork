@@ -79,22 +79,38 @@ Fixed Bottom App Bar with persistent tabs:
 ```
 
 - **Company Switcher**: Prominent top dropdown allowing instant switching between Personal and any registered company.
-- **Cycle Indicator**: Explains the exact date window being aggregated according to user's `month_start_day`.
-- **Category Progress Bars**: Tap any category to jump into a filtered history list for that category.
+- **Date Range Filter (AC-17)**: A compact filter trigger located in the top-left of the Active Cycle summary card. 
+  - In default mode: Displays neutral styling `[ 🔍 Filter Dates ]`.
+  - When custom dates are active: Displays a prominent warning color (`btn-warning` / amber `[ ⚠ Custom Dates: DD MMM – DD MMM ]`) with quick reset to billing cycle.
+- **Budget Utilization Donut Chart (AC-18)**: Replaces the 3 separate numeric blocks with an SVG Donut/Pie chart that visually contrasts Cycle Spend and Remaining Budget against the Monthly Target. Reduces vertical footprint while delivering high-density comparative insights.
+- **Category Progress Bars**: Category budgets section with color-coded progress bars and percentage status.
+- **Recent Transactions**: Real-time list of latest transactions with receipt thumbnail badges.
 
 ---
 
-### 4.2 Camera Capture & Pre-Save Review (`/capture`)
+### 4.2 Camera Capture & Receipt File Upload (`/capture`)
 
-#### Step 1: Live Viewfinder
+`/capture` offers dual capture modes to accommodate both physical receipts and digital/email receipts:
+
+#### Mode Switcher:
+- **[ 📷 Camera ]**: Live viewfinder stream for physical point-of-purchase slips.
+- **[ 📁 Upload File ]**: Dedicated dropzone and file selector for digital invoices and receipts received via email.
+- **[ ✍ Enter Manually ]**: Manual fallback modal without image requirement.
+
+#### Step 1A: Live Camera Viewfinder
 - Fullscreen camera stream via HTML5 `MediaDevices`.
 - Alignment frame guide for till slip positioning.
-- Shutter button with audio/haptic click feedback.
-- Alternative file picker button ("Choose from gallery / files").
+- Shutter button with tactile feedback.
+
+#### Step 1B: Dedicated File Upload Dropzone (AC-19)
+- Drag-and-drop zone supporting images (`.png`, `.jpg`, `.jpeg`, `.webp`).
+- Direct file picker without forced mobile camera constraints (`capture="environment"` disabled for file uploads).
+- Clear instruction for email receipts: *"Drop email receipt screenshots or invoices here"*.
 
 #### Step 2: AI Processing State (<2.0s)
-- Translucent backdrop showing captured still.
+- Translucent backdrop showing captured or uploaded still.
 - Pulse loader: *"Extracting vendor, amount and category via Cloudflare AI..."*
+
 
 #### Step 3: Pre-Save Review Bottom Sheet
 ```text

@@ -226,6 +226,9 @@ the volume of receipts processed per month.
 | AC-14 | Uptime             | The application maintains 99% uptime on a 24/7 basis via Cloudflare edge infrastructure.                                             |
 | AC-15 | Company Members    | An owner can add registered users by email to a business company with an optional category management permission toggle. Members can log and view shared expenses, while only permitted members or owners can manage categories/targets. |
 | AC-16 | Reimbursable Field | When capturing an expense under a Personal profile, the user can flag it as Reimbursable and select the target business company. Reimbursable expenses are badged in the ledger. |
+| AC-17 | Dashboard Date Filter | A filter button in the top left of the dashboard cycle card allows selecting custom from/to dates. When active, the button adopts a warning color and recalculates dashboard metrics for that date window. |
+| AC-18 | Dashboard Visual Charts | The 3 metric blocks (Cycle Spend, Monthly Target, Remaining Budget) are represented via a compact visual Donut/Pie Chart that maximizes screen real estate and visual comparative appeal with clean ZAR badges. |
+| AC-19 | Digital/Email Receipt Upload | A dedicated file upload option in `/capture` allows users to drag-and-drop or select receipt images from their device or email attachments without requiring a live camera feed. |
 
 ---
 
@@ -237,7 +240,9 @@ the volume of receipts processed per month.
 | 0.2     | 16 Sep 2026  | Stefan van Dyk  | Draft  | Confirmed: email provider (Cloudflare Email Send), timezone (SAST), currency (ZAR), Safari exclusion, password reset flow added. |
 | 1.0     | 16 Sep 2026  | Stefan van Dyk  | Approved | Baseline production delivery (AC-01 through AC-14).                                         |
 | 1.2     | 17 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-15 (Multi-User Company Collaboration & RBAC) and AC-16 (Personal Reimbursable Expenses). |
+| 1.3     | 18 Sep 2026  | Senior DevOps / Arch | In Review | Added AC-17 (Dashboard Date Range Filter), AC-18 (Dashboard Visual Charts), and AC-19 (Dedicated Receipt Upload). |
 
 ---
 
 *This document is classified as DRAFT. All ⚠ ASSUMPTION items must be confirmed before moving to IN REVIEW.*
+
