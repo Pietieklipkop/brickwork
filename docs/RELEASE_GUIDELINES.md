@@ -202,11 +202,11 @@ Before and after every release, verify each item:
 - [x] Awaiting explicit user deploy request (Holding at Phase 4 Gate).
 
 ### Post-Flight Checklist (DevOps & User Responsibility)
-- [ ] Changes committed with descriptive conventional commit.
-- [ ] Feature branch pushed to GitHub `origin <branch-name>`.
-- [ ] `npx wrangler deploy` executed successfully.
-- [ ] Live edge URL verified: `https://brickwork.stefanvandyk3.workers.dev`.
-- [ ] Release log in `docs/RELEASE_GUIDELINES.md` updated with commit hash and timestamp.
+- [x] Changes committed with descriptive conventional commit.
+- [x] Feature branch pushed to GitHub `origin <branch-name>`.
+- [x] `npx wrangler deploy` executed successfully.
+- [x] Live edge URL verified: `https://brickwork.stefanvandyk3.workers.dev`.
+- [x] Release log in `docs/RELEASE_GUIDELINES.md` updated with commit hash and timestamp.
 - [ ] User notified to perform manual merge into `main` on GitHub.
 
 ---
@@ -239,7 +239,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | **v1.1.0** | 2026-09-17 | [`182be1c`](https://github.com/Pietieklipkop/brickwork/commit/182be1c) (`fix/v1.1-anonymize-registration-placeholders`) | **Deployed (Pending Merge)** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
 | **v1.2.0** | 2026-09-17 | [`7f7090e`](https://github.com/Pietieklipkop/brickwork/commit/7f7090e) (`feat/v1.2-company-members-and-reimbursements`) | **Deployed (Pending Merge)** | Feature: Company collaboration (members & granular RBAC) & Personal reimbursable expense tracking. |
 | **v1.3.0** | 2026-09-18 | [`0fc80fb`](https://github.com/Pietieklipkop/brickwork/commit/0fc80fb) (`feat/v1.3-dashboard-charts-date-filter-upload`) | **Deployed (Pending Merge)** | Feature: Dashboard date range filtering (AC-17), visual budget Donut/Pie charts (AC-18), and dedicated digital/email receipt file upload (AC-19). |
-| **v1.4.0** | 2026-09-20 | `feat/v1.4-multiple-payment-cards-per-entity` | **Planning / In Review** | Feature: Multiple payment cards/accounts management per entity for Personal and Business profiles (AC-20). |
+| **v1.4.0** | 2026-09-20 | [`345c4e0`](https://github.com/Pietieklipkop/brickwork/commit/345c4e0) (`feat/v1.4-multiple-payment-cards-per-entity`) | **Deployed (Pending Merge)** | Feature: Multiple payment cards/accounts management per entity for Personal and Business profiles (AC-20). |
 
 ---
 
@@ -295,9 +295,9 @@ This log is the permanent record of all production releases for the Brickwork pl
 ---
 
 #### Version 1.4.0 — 2026-09-20 (Feature Release: Multiple Payment Cards per Entity)
-- **Deployment Status:** In Planning / Specification Review
-- **Target Branch:** `feat/v1.4-multiple-payment-cards-per-entity`
-- **Merge Status:** Branch to be created upon specification sign-off.
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `378b8516-b171-4764-af00-d2b3a99917fb`)
+- **Target Branch:** `feat/v1.4-multiple-payment-cards-per-entity` (Commit: `345c4e0`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
   - **Multiple Payment Cards per Entity (AC-20):** Allows users to add, rename, set default, and delete multiple payment cards/accounts for both Personal profiles and Business entities.
   - **Settings UI Management:** New payment card management section in `/settings` scoped dynamically to the currently active entity (Personal or Business).
