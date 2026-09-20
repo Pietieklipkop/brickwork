@@ -82,4 +82,45 @@ describe('PreSaveBottomSheet.svelte (AC-16 Reimbursable Expenses)', () => {
 		await expect.element(page.getByText('Acme Holdings')).toBeInTheDocument();
 		await expect.element(page.getByText('Stark Industries')).toBeInTheDocument();
 	});
+
+	it('pre-selects the default card when multiple payment accounts are available (AC-20)', async () => {
+		const multipleAccounts = [
+			{ id: 'acc-1', name: 'Personal Cheque', isDefault: false },
+			{ id: 'acc-2', name: 'Discovery Credit Card', isDefault: true },
+			{ id: 'acc-3', name: 'Capitec Savings', isDefault: false }
+		];
+
+		const onsave = vi.fn();
+		render(PreSaveBottomSheet, {
+			extractedData: {
+				vendorName: 'Exclusive Books',
+				amountCents: 45000,
+				transactionDate: '2026-09-20',
+				suggestedCategoryId: 'cat-2',
+				confidence: 1.0
+			},
+			categories: dummyCategories,
+			paymentAccounts: multipleAccounts,
+			isPersonal: true,
+			businessCompanies: dummyCompanies,
+			onsave,
+			oncancel: vi.fn()
+		});
+
+		// Paid With dropdown should exist and render all cards
+		await expect.element(page.getByLabelText('Paid With')).toBeInTheDocument();
+		await expect.element(page.getByText('Discovery Credit Card (Default)')).toBeInTheDocument();
+
+		// Submit expense and verify default card ID acc-2 was sent
+		const submitBtn = page.getByRole('button', { name: 'Save Expense' });
+		await submitBtn.click();
+
+		expect(onsave).toHaveBeenCalledWith(
+			expect.objectContaining({
+				vendorName: 'Exclusive Books',
+				amountCents: 45000,
+				accountId: 'acc-2'
+			})
+		);
+	});
 });

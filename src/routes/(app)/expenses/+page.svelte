@@ -372,6 +372,16 @@
 								</span>
 								<span>&bull;</span>
 								<span>{formatDateShort(exp.transactionDate)}</span>
+								{#if exp.accountName}
+									<span>&bull;</span>
+									<span class="inline-flex items-center space-x-1 text-slate-600 dark:text-slate-300 font-medium">
+										<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<rect width="20" height="14" x="2" y="5" rx="2"/>
+											<line x1="2" x2="22" y1="10" y2="10"/>
+										</svg>
+										<span>{exp.accountName}</span>
+									</span>
+								{/if}
 							</div>
 
 							{#if exp.notes}

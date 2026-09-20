@@ -229,6 +229,7 @@ the volume of receipts processed per month.
 | AC-17 | Dashboard Date Filter | A filter button in the top left of the dashboard cycle card allows selecting custom from/to dates. When active, the button adopts a warning color and recalculates dashboard metrics for that date window. |
 | AC-18 | Dashboard Visual Charts | The 3 metric blocks (Cycle Spend, Monthly Target, Remaining Budget) are represented via a compact visual Donut/Pie Chart that maximizes screen real estate and visual comparative appeal with clean ZAR badges. |
 | AC-19 | Digital/Email Receipt Upload | A dedicated file upload option in `/capture` allows users to drag-and-drop or select receipt images from their device or email attachments without requiring a live camera feed. |
+| AC-20 | Multiple Payment Cards | Users can manage multiple payment cards/accounts for both Personal and Business entities in Settings (add, edit, delete, set default). The capture flow automatically pre-selects the default card and lists all cards, and expenses record the card used. |
 
 ---
 
@@ -240,9 +241,11 @@ the volume of receipts processed per month.
 | 0.2     | 16 Sep 2026  | Stefan van Dyk  | Draft  | Confirmed: email provider (Cloudflare Email Send), timezone (SAST), currency (ZAR), Safari exclusion, password reset flow added. |
 | 1.0     | 16 Sep 2026  | Stefan van Dyk  | Approved | Baseline production delivery (AC-01 through AC-14).                                         |
 | 1.2     | 17 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-15 (Multi-User Company Collaboration & RBAC) and AC-16 (Personal Reimbursable Expenses). |
-| 1.3     | 18 Sep 2026  | Senior DevOps / Arch | In Review | Added AC-17 (Dashboard Date Range Filter), AC-18 (Dashboard Visual Charts), and AC-19 (Dedicated Receipt Upload). |
+| 1.3     | 18 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-17 (Dashboard Date Range Filter), AC-18 (Dashboard Visual Charts), and AC-19 (Dedicated Receipt Upload). |
+| 1.4     | 20 Sep 2026  | Senior DevOps / Arch | In Review | Added AC-20 (Multiple Payment Cards per Entity for Personal and Business profiles). |
 
 ---
 
 *This document is classified as DRAFT. All ⚠ ASSUMPTION items must be confirmed before moving to IN REVIEW.*
+
 

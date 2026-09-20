@@ -193,21 +193,20 @@ Before and after every release, verify each item:
 
 ### Pre-Flight Checklist (Lead Developer Responsibility)
 - [x] Requirements aligned and specifications updated in `docs/`.
-- [x] Release branch created and checked out (`feat/v1.3-dashboard-charts-date-filter-upload`).
+- [x] Release branch created and checked out (`feat/v1.4-multiple-payment-cards-per-entity`).
 - [x] Code implemented using Svelte 5 runes and integer ZAR cents math.
 - [x] `pnpm check` passes (0 errors, 0 warnings).
-- [x] `pnpm test:unit --run` passes (all 64 unit & component tests green).
+- [x] `pnpm test:unit --run` passes (all 65 unit & component tests green).
 - [x] `npx playwright test` passes (all 17 E2E suites green).
 - [x] `pnpm build` creates production bundle in `.svelte-kit/cloudflare/_worker.js`.
 - [x] Awaiting explicit user deploy request (Holding at Phase 4 Gate).
 
 ### Post-Flight Checklist (DevOps & User Responsibility)
-- [x] Changes committed with descriptive conventional commit.
-- [x] Feature branch pushed to GitHub `origin <branch-name>`.
-- [x] Remote D1 migration executed (`0001_add_company_members_and_reimbursements.sql`).
-- [x] `npx wrangler deploy` executed successfully.
-- [x] Live edge URL verified: `https://brickwork.stefanvandyk3.workers.dev`.
-- [x] Release log in `docs/RELEASE_GUIDELINES.md` updated with commit hash and timestamp.
+- [ ] Changes committed with descriptive conventional commit.
+- [ ] Feature branch pushed to GitHub `origin <branch-name>`.
+- [ ] `npx wrangler deploy` executed successfully.
+- [ ] Live edge URL verified: `https://brickwork.stefanvandyk3.workers.dev`.
+- [ ] Release log in `docs/RELEASE_GUIDELINES.md` updated with commit hash and timestamp.
 - [ ] User notified to perform manual merge into `main` on GitHub.
 
 ---
@@ -240,6 +239,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | **v1.1.0** | 2026-09-17 | [`182be1c`](https://github.com/Pietieklipkop/brickwork/commit/182be1c) (`fix/v1.1-anonymize-registration-placeholders`) | **Deployed (Pending Merge)** | Fix: Anonymize registration form placeholders (John Doe, john.doe@example.com). |
 | **v1.2.0** | 2026-09-17 | [`7f7090e`](https://github.com/Pietieklipkop/brickwork/commit/7f7090e) (`feat/v1.2-company-members-and-reimbursements`) | **Deployed (Pending Merge)** | Feature: Company collaboration (members & granular RBAC) & Personal reimbursable expense tracking. |
 | **v1.3.0** | 2026-09-18 | [`0fc80fb`](https://github.com/Pietieklipkop/brickwork/commit/0fc80fb) (`feat/v1.3-dashboard-charts-date-filter-upload`) | **Deployed (Pending Merge)** | Feature: Dashboard date range filtering (AC-17), visual budget Donut/Pie charts (AC-18), and dedicated digital/email receipt file upload (AC-19). |
+| **v1.4.0** | 2026-09-20 | `feat/v1.4-multiple-payment-cards-per-entity` | **Planning / In Review** | Feature: Multiple payment cards/accounts management per entity for Personal and Business profiles (AC-20). |
 
 ---
 
@@ -292,5 +292,14 @@ This log is the permanent record of all production releases for the Brickwork pl
   - **Budget Utilization Donut/Pie Chart (AC-18):** Replaces 3 static metric blocks with an SVG Donut/Pie chart visualizing Spend vs Remaining Budget vs Monthly Target with high-density badges, saving screen real estate.
   - **Digital/Email Receipt File Upload (AC-19):** Dedicated file upload dropzone in `/capture` for uploading receipt screenshots and invoices without requiring a live camera feed.
 
+---
 
-
+#### Version 1.4.0 — 2026-09-20 (Feature Release: Multiple Payment Cards per Entity)
+- **Deployment Status:** In Planning / Specification Review
+- **Target Branch:** `feat/v1.4-multiple-payment-cards-per-entity`
+- **Merge Status:** Branch to be created upon specification sign-off.
+- **Scope & Highlights:**
+  - **Multiple Payment Cards per Entity (AC-20):** Allows users to add, rename, set default, and delete multiple payment cards/accounts for both Personal profiles and Business entities.
+  - **Settings UI Management:** New payment card management section in `/settings` scoped dynamically to the currently active entity (Personal or Business).
+  - **Seamless Capture Integration:** In `/capture`, the pre-save bottom sheet dynamically lists all active entity cards with the designated default automatically pre-selected.
+  - **Expense Ledger Visibility:** Expenses in `/expenses` display the payment card name used to settle the transaction.

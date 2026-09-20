@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
-import { expense as expenseTable, category as categoryTable, company as companyTable } from '$lib/server/db/schema';
+import { expense as expenseTable, category as categoryTable, company as companyTable, paymentAccount as paymentAccountTable } from '$lib/server/db/schema';
 import { deleteReceiptFromR2 } from '$lib/server/storage';
 import { calculateCycleWindow, formatSastIsoDate } from '$lib/domain/billing';
 import { and, eq, gte, lte, like, desc, inArray } from 'drizzle-orm';
@@ -84,12 +84,15 @@ export const load: PageServerLoad = async ({ parent, url, platform }) => {
 			categoryName: categoryTable.name,
 			categoryColor: categoryTable.colorHex,
 			companyId: expenseTable.companyId,
+			accountId: expenseTable.accountId,
+			accountName: paymentAccountTable.name,
 			isReimbursable: expenseTable.isReimbursable,
 			reimbursableCompanyId: expenseTable.reimbursableCompanyId,
 			reimbursableCompanyName: reimbursableComp.name
 		})
 		.from(expenseTable)
 		.leftJoin(categoryTable, eq(expenseTable.categoryId, categoryTable.id))
+		.leftJoin(paymentAccountTable, eq(expenseTable.accountId, paymentAccountTable.id))
 		.leftJoin(reimbursableComp, eq(expenseTable.reimbursableCompanyId, reimbursableComp.id))
 		.where(and(...conditions))
 		.orderBy(desc(expenseTable.transactionDate), desc(expenseTable.createdAt));

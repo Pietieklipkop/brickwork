@@ -6,10 +6,11 @@ import {
 	company as companyTable,
 	category as categoryTable,
 	expense as expenseTable,
-	companyMember as companyMemberTable
+	companyMember as companyMemberTable,
+	paymentAccount as paymentAccountTable
 } from '$lib/server/db/schema';
 import { seedBusinessCompany } from '$lib/server/db/seed';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, asc, desc } from 'drizzle-orm';
 
 async function checkCanManageCategories(db: ReturnType<typeof getDb>, companyId: string, userId: string): Promise<boolean> {
 	const [comp] = await db
@@ -43,7 +44,8 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 			companies,
 			activeCompany,
 			categories: [],
-			members: []
+			members: [],
+			paymentAccounts: []
 		};
 	}
 
@@ -82,12 +84,19 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 		}));
 	}
 
+	const paymentAccounts = await db
+		.select()
+		.from(paymentAccountTable)
+		.where(eq(paymentAccountTable.companyId, activeCompany.id))
+		.orderBy(desc(paymentAccountTable.isDefault), asc(paymentAccountTable.createdAt));
+
 	return {
 		user,
 		companies,
 		activeCompany,
 		categories,
-		members
+		members,
+		paymentAccounts
 	};
 };
 
@@ -490,6 +499,242 @@ export const actions: Actions = {
 
 			await db.delete(categoryTable).where(eq(categoryTable.id, categoryId));
 		}
+
+		return { success: true };
+	},
+
+	createPaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const companyId = String(data.get('companyId') || '');
+		const name = String(data.get('name') || '').trim();
+		const isDefault = data.get('isDefault') === 'true' || data.get('isDefault') === 'on';
+
+		if (!companyId || !name) {
+			return fail(400, { error: 'Payment card or account name is required.' });
+		}
+
+		if (name.length < 2) {
+			return fail(400, { error: 'Card or account name must be at least 2 characters.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be entity owner
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		// Check existing cards for this company
+		const existingCards = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.companyId, companyId));
+
+		// If user selected isDefault OR this is the first card for the entity, make it default
+		const shouldBeDefault = isDefault || existingCards.length === 0;
+
+		if (shouldBeDefault && existingCards.length > 0) {
+			// Clear existing defaults for this company
+			await db
+				.update(paymentAccountTable)
+				.set({ isDefault: false, updatedAt: new Date() })
+				.where(eq(paymentAccountTable.companyId, companyId));
+		}
+
+		await db.insert(paymentAccountTable).values({
+			id: crypto.randomUUID(),
+			companyId,
+			name,
+			isDefault: shouldBeDefault
+		});
+
+		return { success: true, accountCreated: true };
+	},
+
+	updatePaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const id = String(data.get('id') || '');
+		const name = String(data.get('name') || '').trim();
+
+		if (!id || !name) {
+			return fail(400, { error: 'Card ID and name are required.' });
+		}
+
+		if (name.length < 2) {
+			return fail(400, { error: 'Card or account name must be at least 2 characters.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		const [card] = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.id, id))
+			.limit(1);
+
+		if (!card) {
+			return fail(404, { error: 'Payment card not found.' });
+		}
+
+		// Verify owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, card.companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		await db
+			.update(paymentAccountTable)
+			.set({ name, updatedAt: new Date() })
+			.where(eq(paymentAccountTable.id, id));
+
+		return { success: true };
+	},
+
+	deletePaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const id = String(data.get('id') || '');
+
+		if (!id) {
+			return fail(400, { error: 'Card ID is required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		const [card] = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.id, id))
+			.limit(1);
+
+		if (!card) {
+			return fail(404, { error: 'Payment card not found.' });
+		}
+
+		// Verify owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, card.companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		// Check count of cards for this company
+		const allCards = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.companyId, card.companyId))
+			.orderBy(asc(paymentAccountTable.createdAt));
+
+		if (allCards.length <= 1) {
+			return fail(400, {
+				error: 'Cannot delete the only payment card. Every company or personal profile must maintain at least one payment method.'
+			});
+		}
+
+		// If the card being deleted was default, promote the oldest remaining card to default
+		if (card.isDefault) {
+			const nextDefault = allCards.find((c) => c.id !== card.id);
+			if (nextDefault) {
+				await db
+					.update(paymentAccountTable)
+					.set({ isDefault: true, updatedAt: new Date() })
+					.where(eq(paymentAccountTable.id, nextDefault.id));
+			}
+		}
+
+		await db.delete(paymentAccountTable).where(eq(paymentAccountTable.id, id));
+
+		return { success: true };
+	},
+
+	setDefaultPaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const id = String(data.get('id') || '');
+
+		if (!id) {
+			return fail(400, { error: 'Card ID is required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		const [card] = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.id, id))
+			.limit(1);
+
+		if (!card) {
+			return fail(404, { error: 'Payment card not found.' });
+		}
+
+		// Verify owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, card.companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		// Reset all cards for this company to isDefault = false
+		await db
+			.update(paymentAccountTable)
+			.set({ isDefault: false, updatedAt: new Date() })
+			.where(eq(paymentAccountTable.companyId, card.companyId));
+
+		// Set target card to isDefault = true
+		await db
+			.update(paymentAccountTable)
+			.set({ isDefault: true, updatedAt: new Date() })
+			.where(eq(paymentAccountTable.id, id));
 
 		return { success: true };
 	}

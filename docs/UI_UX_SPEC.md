@@ -192,7 +192,12 @@ Fixed Bottom App Bar with persistent tabs:
 
 - **User Profile**: Name, email, role badge (`Main Member`).
 - **Month Cycle Start Day**: Numerical selector constrained between `1` and `28` (with preview explanation, e.g., *"Your month cycle runs from the 15th to the 14th of each month"*).
-- **Default Company**: Dropdown to set which company loads automatically on login/dashboard.
+- **Payment Cards & Accounts Management (AC-20)**:
+  - Accessible for both **Personal** profiles and any **Business** entity selected in the top company switcher.
+  - **Cards Ledger**: Lists all cards and payment methods linked to the active entity with card icon and `Default` badge.
+  - **Make Default**: One-click action to switch the default payment card for that company.
+  - **Add Card Form**: Input for card/account name (e.g. *"FNB Credit Card"*, *"Standard Bank Corporate Cheque"*) with optional *"Set as default"* toggle.
+  - **Edit & Delete**: Rename existing cards or delete non-primary cards (prevents deleting the last remaining card to ensure a valid default exists).
 - **Company Collaboration & Members**:
   - For company owners:
     - Add collaborator by email.

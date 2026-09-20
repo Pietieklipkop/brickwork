@@ -45,6 +45,18 @@
 	let memberError = $state('');
 	let memberSuccess = $state('');
 
+	// Payment Card Management State (AC-20)
+	let showAddCard = $state(false);
+	let newCardName = $state('');
+	let newCardIsDefault = $state(false);
+	let isCreatingCard = $state(false);
+	let cardError = $state('');
+	let cardSuccess = $state('');
+
+	let editingCard: any = $state(null);
+	let editCardName = $state('');
+	let isUpdatingCard = $state(false);
+
 	const PRESET_COLORS = [
 		'#0B2240', '#10B981', '#0284C7', '#F59E0B', '#8B5CF6', '#EC4899', '#64748B', '#E11D48'
 	];
@@ -330,6 +342,136 @@
 			}
 		} catch (err: any) {
 			memberError = err?.message || 'Network error.';
+		}
+	}
+
+	async function handleCreateCard(e: Event) {
+		e.preventDefault();
+		if (!newCardName.trim()) return;
+		isCreatingCard = true;
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('name', newCardName.trim());
+		form.append('isDefault', String(newCardIsDefault));
+
+		try {
+			const res = await fetch('/settings?/createPaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				showAddCard = false;
+				newCardName = '';
+				newCardIsDefault = false;
+				cardSuccess = 'Payment card added successfully!';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to create payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
+		} finally {
+			isCreatingCard = false;
+		}
+	}
+
+	function startEditCard(card: any) {
+		editingCard = card;
+		editCardName = card.name;
+		cardError = '';
+		cardSuccess = '';
+	}
+
+	async function handleUpdateCard(e: Event) {
+		e.preventDefault();
+		if (!editingCard || !editCardName.trim()) return;
+		isUpdatingCard = true;
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('id', editingCard.id);
+		form.append('name', editCardName.trim());
+
+		try {
+			const res = await fetch('/settings?/updatePaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				editingCard = null;
+				cardSuccess = 'Payment card updated successfully!';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to update payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
+		} finally {
+			isUpdatingCard = false;
+		}
+	}
+
+	async function handleDeleteCard(id: string) {
+		if (data.paymentAccounts.length <= 1) {
+			alert('Cannot delete the only payment card. Every company or personal profile must maintain at least one payment method.');
+			return;
+		}
+
+		if (!confirm('Are you sure you want to delete this payment card?')) return;
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('id', id);
+
+		try {
+			const res = await fetch('/settings?/deletePaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				cardSuccess = 'Payment card removed.';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to delete payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
+		}
+	}
+
+	async function handleSetDefaultCard(id: string) {
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('id', id);
+
+		try {
+			const res = await fetch('/settings?/setDefaultPaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				cardSuccess = 'Default payment card updated!';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to update default payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
 		}
 	}
 </script>
@@ -649,7 +791,183 @@
 		</div>
 	</section>
 
-	<!-- 4. Team Collaboration & Members (AC-15) -->
+	<!-- 4. Payment Cards & Accounts (AC-20) -->
+	<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+		<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+			<div>
+				<h2 class="text-base font-bold text-slate-900 dark:text-white">
+					Payment Cards & Accounts ({data.activeCompany.name})
+				</h2>
+				<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+					Manage payment cards and bank accounts for {data.activeCompany.name}. The default card is pre-selected when capturing receipts (AC-20).
+				</p>
+			</div>
+
+			{#if data.activeCompany.isOwner}
+				<button
+					type="button"
+					onclick={() => {
+						showAddCard = !showAddCard;
+						cardError = '';
+						cardSuccess = '';
+					}}
+					class="btn btn-sm bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold"
+				>
+					{showAddCard ? 'Cancel' : '+ Add Card'}
+				</button>
+			{/if}
+		</div>
+
+		{#if !data.activeCompany.isOwner}
+			<div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 flex items-center space-x-2">
+				<svg class="w-4 h-4 shrink-0 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+				<span>View-only: Only the company owner can manage payment cards and accounts.</span>
+			</div>
+		{/if}
+
+		{#if cardError}
+			<div class="alert alert-error text-xs rounded-xl p-3">
+				<span>{cardError}</span>
+			</div>
+		{/if}
+
+		{#if cardSuccess}
+			<div class="alert alert-success text-xs rounded-xl p-3">
+				<span>{cardSuccess}</span>
+			</div>
+		{/if}
+
+		<!-- Add Card Form -->
+		{#if showAddCard && data.activeCompany.isOwner}
+			<form onsubmit={handleCreateCard} class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+				<h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+					Add Payment Card / Account for {data.activeCompany.name}
+				</h3>
+
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+					<div>
+						<label for="new-card-name" class="block text-xs font-semibold mb-1">Card / Account Name</label>
+						<input
+							id="new-card-name"
+							type="text"
+							required
+							bind:value={newCardName}
+							placeholder="e.g. FNB Credit Card, Capitec Debit"
+							class="input input-bordered input-sm w-full h-10 text-xs"
+						/>
+					</div>
+
+					<div class="flex items-center space-x-2 py-2">
+						<input
+							id="new-card-default-toggle"
+							type="checkbox"
+							bind:checked={newCardIsDefault}
+							class="toggle toggle-primary toggle-sm"
+						/>
+						<label for="new-card-default-toggle" class="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+							Set as default card
+						</label>
+					</div>
+				</div>
+
+				<div class="flex items-center justify-end space-x-2 pt-2">
+					<button
+						type="button"
+						onclick={() => (showAddCard = false)}
+						class="btn btn-ghost btn-sm text-xs"
+					>
+						Cancel
+					</button>
+					<button
+						type="submit"
+						disabled={isCreatingCard}
+						class="btn btn-sm bg-[#0B2240] text-white font-bold text-xs"
+					>
+						{#if isCreatingCard}
+							<span class="loading loading-spinner loading-xs"></span>
+						{/if}
+						Save Card
+					</button>
+				</div>
+			</form>
+		{/if}
+
+		<!-- Cards List -->
+		<div class="divide-y divide-slate-100 dark:divide-slate-800">
+			{#if !data.paymentAccounts || data.paymentAccounts.length === 0}
+				<div class="py-4 text-center text-xs text-slate-400">
+					No payment cards configured. Click "+ Add Card" above to add one.
+				</div>
+			{:else}
+				{#each data.paymentAccounts as card (card.id)}
+					<div class="py-3 flex items-center justify-between gap-3">
+						<div class="flex items-center space-x-3">
+							<div class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 border border-slate-200 dark:border-slate-700">
+								<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<rect width="20" height="14" x="2" y="5" rx="2"/>
+									<line x1="2" x2="22" y1="10" y2="10"/>
+								</svg>
+							</div>
+
+							<div>
+								<div class="flex items-center space-x-2">
+									<span class="text-sm font-bold text-slate-900 dark:text-white">{card.name}</span>
+									{#if card.isDefault}
+										<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+											Default
+										</span>
+									{/if}
+								</div>
+							</div>
+						</div>
+
+						<div class="flex items-center space-x-2">
+							{#if data.activeCompany.isOwner}
+								{#if !card.isDefault}
+									<button
+										type="button"
+										onclick={() => handleSetDefaultCard(card.id)}
+										class="btn btn-ghost btn-xs text-[11px] text-slate-600 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 font-semibold"
+										title="Set as primary payment method"
+									>
+										Make Default
+									</button>
+								{/if}
+
+								<button
+									type="button"
+									onclick={() => startEditCard(card)}
+									class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+									aria-label="Edit {card.name}"
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+										<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+									</svg>
+								</button>
+
+								<button
+									type="button"
+									onclick={() => handleDeleteCard(card.id)}
+									disabled={data.paymentAccounts.length <= 1}
+									class="p-1.5 rounded-lg {data.paymentAccounts.length <= 1 ? 'text-slate-200 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600'}"
+									aria-label="Delete {card.name}"
+									title={data.paymentAccounts.length <= 1 ? 'Cannot delete the only card for this entity' : 'Delete payment card'}
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+									</svg>
+								</button>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			{/if}
+		</div>
+	</section>
+
+	<!-- 5. Team Collaboration & Members (AC-15) -->
 	{#if !data.activeCompany.isPersonal}
 		<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
 			<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -921,6 +1239,52 @@
 					<PrimaryActionButton
 						type="submit"
 						loading={isUpdatingCompany}
+						variant="primary"
+						class="btn-sm"
+					>
+						Save
+					</PrimaryActionButton>
+				</div>
+			</form>
+		</div>
+	</div>
+{/if}
+
+<!-- Edit Payment Card Modal -->
+{#if editingCard}
+	<div
+		class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div class="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+			<h3 class="text-base font-bold text-slate-900 dark:text-white">
+				Rename Payment Card
+			</h3>
+
+			<form onsubmit={handleUpdateCard} class="space-y-4">
+				<div>
+					<label for="edit-card-name" class="block text-xs font-semibold mb-1">Card / Account Name</label>
+					<input
+						id="edit-card-name"
+						type="text"
+						required
+						bind:value={editCardName}
+						class="input input-bordered w-full h-11 text-sm bg-slate-50 dark:bg-slate-800 font-semibold"
+					/>
+				</div>
+
+				<div class="pt-2 flex items-center justify-end space-x-3">
+					<button
+						type="button"
+						onclick={() => (editingCard = null)}
+						class="btn btn-ghost btn-sm"
+					>
+						Cancel
+					</button>
+					<PrimaryActionButton
+						type="submit"
+						loading={isUpdatingCard}
 						variant="primary"
 						class="btn-sm"
 					>

@@ -119,8 +119,10 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
 - `addCompanyMember`: Creator/Owner only. Accepts `email` and `canManageCategories`. Verifies registered user exists and creates `company_member` link.
 - `removeCompanyMember`: Creator/Owner only. Accepts `memberId` and revokes company access.
 - `toggleMemberCategoryPermission`: Creator/Owner only. Updates `canManageCategories` flag for target member.
-- `createPaymentAccount`: Adds account (e.g. "FNB Credit Card").
-- `setDefaultPaymentAccount`: Sets target account `isDefault = true` and unsets other accounts for the company.
+- `createPaymentAccount`: Creator/Owner. Accepts `name` and optional `isDefault`. If `isDefault` is set or if this is the company's first card, unsets other defaults and sets this card as default.
+- `updatePaymentAccount`: Creator/Owner. Accepts `id` and `name`. Updates payment card/account name.
+- `deletePaymentAccount`: Creator/Owner. Accepts `id`. Prevents deletion if only one card remains for the company. If the deleted card was default, automatically designates the oldest remaining card as default.
+- `setDefaultPaymentAccount`: Creator/Owner. Accepts `id`. Sets target card `isDefault = true` and all other company cards `isDefault = false`.
 
 ---
 
