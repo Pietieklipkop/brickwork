@@ -5,6 +5,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 
+	import { processUploadedImageFile } from '$lib/domain/image-filters';
+
 	let { data } = $props();
 
 	// Mode selector: 'camera' | 'upload'
@@ -41,7 +43,7 @@
 		}
 	});
 
-	async function handleImageCapture(file: File, url: string) {
+	async function handleImageCapture(file: File, url: string, ocrFile?: File) {
 		capturedFile = file;
 		previewUrl = url;
 		isProcessing = true;
@@ -49,7 +51,8 @@
 
 		try {
 			const form = new FormData();
-			form.append('image', file);
+			// Send the preprocessed, shadow-removed, high-contrast crop to the OCR engine
+			form.append('image', ocrFile || file);
 			form.append(
 				'categories',
 				JSON.stringify(
@@ -95,7 +98,7 @@
 		}
 	}
 
-	function optimizeAndProcessFile(file: File) {
+	async function optimizeAndProcessFile(file: File) {
 		if (!file.type.startsWith('image/')) {
 			saveError = 'Please upload a valid image file (PNG, JPG, WebP).';
 			return;
@@ -104,64 +107,14 @@
 		saveError = '';
 		isProcessing = true;
 
-		const img = new Image();
-		const reader = new FileReader();
-
-		reader.onload = (event) => {
-			img.onload = () => {
-				const canvas = document.createElement('canvas');
-				const maxDim = 1600;
-				let w = img.width;
-				let h = img.height;
-
-				if (w > maxDim || h > maxDim) {
-					if (w > h) {
-						h = Math.round((h * maxDim) / w);
-						w = maxDim;
-					} else {
-						w = Math.round((w * maxDim) / h);
-						h = maxDim;
-					}
-				}
-
-				canvas.width = w;
-				canvas.height = h;
-				const ctx = canvas.getContext('2d');
-				if (!ctx) {
-					isProcessing = false;
-					return;
-				}
-
-				ctx.drawImage(img, 0, 0, w, h);
-				canvas.toBlob(
-					(blob) => {
-						if (!blob) {
-							isProcessing = false;
-							return;
-						}
-						const optimizedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), {
-							type: 'image/webp'
-						});
-						const preview = URL.createObjectURL(blob);
-						handleImageCapture(optimizedFile, preview);
-					},
-					'image/webp',
-					0.82
-				);
-			};
-			img.onerror = () => {
-				isProcessing = false;
-				saveError = 'Could not decode image file. Please try another image.';
-			};
-			img.src = event.target?.result as string;
-		};
-
-		reader.onerror = () => {
-			isProcessing = false;
-			saveError = 'Failed to read the selected file.';
-		};
-
-		reader.readAsDataURL(file);
+		try {
+			const { originalFile, ocrFile, previewUrl } = await processUploadedImageFile(file);
+			await handleImageCapture(originalFile, previewUrl, ocrFile);
+		} catch (err: any) {
+			console.warn('Advanced file optimization failed, using raw fallback:', err);
+			const preview = URL.createObjectURL(file);
+			await handleImageCapture(file, preview, file);
+		}
 	}
 
 	function handleDragOver(e: DragEvent) {

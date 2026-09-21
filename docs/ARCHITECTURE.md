@@ -109,9 +109,16 @@ South African till slips (Pick n Pay, Checkers, Woolworths, Spar, Engen, Total, 
 - Currency markers as `R`, `ZAR`, or bare numbers
 
 **Extraction Pipeline**:
-1. **Client pre-processing**: The client downscales the camera frame to a max dimension of 1600px with 80% JPEG quality to ensure payload transmission remains under 500KB and network upload takes <500ms.
-2. **Worker processing**: The image bytes are passed to `platform.env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', ...)`.
-3. **Structured Response**:
+1. **Client Reticle Auto-Crop**: Viewfinder camera frames are mapped and cropped directly to the user-visible alignment reticle (taking CSS `object-cover` scaling into account). This eliminates extraneous background clutter and delivers a 3x-4x effective optical resolution multiplier on receipt text without optical zoom.
+2. **Dual-Stream Client Preprocessing**:
+   - **Record Stream**: The unadulterated, high-resolution color cropped photo is compressed as high-quality WebP (0.85) for Cloudflare R2 audit storage.
+   - **OCR Stream**: The cropped frame undergoes a 4-stage Canvas 2D image processing filter pipeline (< 40ms):
+     1. *Grayscale Normalization*: Rec. 601 luma weighting ($0.299R + 0.587G + 0.114B$) stripping background color distraction.
+     2. *Adaptive Shadow Division*: Bilinearly interpolated local background luminance division that completely eliminates hand and phone cast shadows across the slip.
+     3. *Auto-Levels Histogram Contrast*: Linear stretching between the 2nd and 98th percentiles to render faint thermal printing in deep black.
+     4. *High-Frequency Unsharp Masking*: 3x3 Laplacian sharpening convolution kernel crispening dot-matrix characters and decimal points.
+3. **Worker Processing**: The enhanced image bytes and dynamic company categories are passed to `platform.env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', ...)` with South African till slip disambiguation rules (distinguishing `TOTAL DUE` from `15% VAT`, `CHANGE`, `CASH TENDERED`, and discounts).
+4. **Structured Response**:
    ```json
    {
      "vendor_name": "Checkers Hyper",
@@ -121,7 +128,7 @@ South African till slips (Pick n Pay, Checkers, Woolworths, Spar, Engen, Total, 
      "confidence": 0.95
    }
    ```
-4. **Latency Budget**: Total roundtrip target is <2000ms. If the AI model response degrades due to queue latency, a timeout gracefully surfaces the image to the user for manual entry on the review screen.
+5. **Latency Budget**: Total roundtrip target is <2000ms. If the AI model response degrades due to queue latency, a timeout gracefully surfaces the image to the user for manual entry on the review screen.
 
 ---
 

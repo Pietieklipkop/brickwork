@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { processReceiptSnapshot, processUploadedImageFile } from '$lib/domain/image-filters';
 
 	interface Props {
-		oncapture: (file: File, previewUrl: string) => void;
+		oncapture: (file: File, previewUrl: string, ocrFile?: File) => void;
 		isProcessing?: boolean;
 	}
 
 	let { oncapture, isProcessing = false }: Props = $props();
 
+	let containerEl: HTMLElement | null = $state(null);
+	let reticleEl: HTMLElement | null = $state(null);
 	let videoEl: HTMLVideoElement | null = $state(null);
 	let fileInputEl: HTMLInputElement | null = $state(null);
 	let stream: MediaStream | null = $state(null);
@@ -62,13 +65,27 @@
 	async function takeSnapshot() {
 		if (!videoEl || !cameraActive || isProcessing) return;
 
-		statusAnnouncement = 'Capturing receipt image and optimizing...';
+		statusAnnouncement = 'Capturing receipt, auto-cropping, and enhancing for AI OCR...';
 
+		try {
+			if (containerEl && reticleEl) {
+				const { originalFile, ocrFile, previewUrl } = await processReceiptSnapshot(
+					videoEl,
+					containerEl,
+					reticleEl
+				);
+				statusAnnouncement = 'Receipt captured. Processing with AI vision model...';
+				oncapture(originalFile, previewUrl, ocrFile);
+				return;
+			}
+		} catch (err) {
+			console.warn('Optimized snapshot processing failed, using fallback:', err);
+		}
+
+		// Fallback snapshot if elements or canvas error
 		const canvas = document.createElement('canvas');
 		const videoWidth = videoEl.videoWidth || 1280;
 		const videoHeight = videoEl.videoHeight || 720;
-
-		// Downscale to max 1600px maintaining aspect ratio
 		const maxDim = 1600;
 		let targetWidth = videoWidth;
 		let targetHeight = videoHeight;
@@ -90,7 +107,6 @@
 
 		ctx.drawImage(videoEl, 0, 0, targetWidth, targetHeight);
 
-		// Export as high efficiency WebP (or JPEG fallback)
 		canvas.toBlob(
 			(blob) => {
 				if (!blob) return;
@@ -100,66 +116,33 @@
 				oncapture(file, previewUrl);
 			},
 			'image/webp',
-			0.82
+			0.85
 		);
 	}
 
-	function handleFileSelected(e: Event) {
+	async function handleFileSelected(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
 
-		statusAnnouncement = 'Receipt file selected. Optimizing image...';
+		statusAnnouncement = 'Receipt file selected. Optimizing image and enhancing text...';
 
-		// Downscale uploaded file on canvas before processing
-		const img = new Image();
-		const reader = new FileReader();
-
-		reader.onload = (event) => {
-			img.onload = () => {
-				const canvas = document.createElement('canvas');
-				const maxDim = 1600;
-				let w = img.width;
-				let h = img.height;
-
-				if (w > maxDim || h > maxDim) {
-					if (w > h) {
-						h = Math.round((h * maxDim) / w);
-						w = maxDim;
-					} else {
-						w = Math.round((w * maxDim) / h);
-						h = maxDim;
-					}
-				}
-
-				canvas.width = w;
-				canvas.height = h;
-				const ctx = canvas.getContext('2d');
-				if (!ctx) return;
-
-				ctx.drawImage(img, 0, 0, w, h);
-				canvas.toBlob(
-					(blob) => {
-						if (!blob) return;
-						const optimizedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), {
-							type: 'image/webp'
-						});
-						const previewUrl = URL.createObjectURL(blob);
-						statusAnnouncement = 'Receipt optimized. Processing with AI vision model...';
-						oncapture(optimizedFile, previewUrl);
-					},
-					'image/webp',
-					0.82
-				);
-			};
-			img.src = event.target?.result as string;
-		};
-
-		reader.readAsDataURL(file);
+		try {
+			const { originalFile, ocrFile, previewUrl } = await processUploadedImageFile(file);
+			statusAnnouncement = 'Receipt optimized. Processing with AI vision model...';
+			oncapture(originalFile, previewUrl, ocrFile);
+		} catch (err) {
+			console.warn('Uploaded image enhancement failed, using raw fallback:', err);
+			const previewUrl = URL.createObjectURL(file);
+			oncapture(file, previewUrl, file);
+		}
 	}
 </script>
 
-<div class="relative w-full h-full min-h-[420px] max-h-[75vh] bg-black rounded-2xl overflow-hidden shadow-2xl flex flex-col items-center justify-center select-none">
+<div
+	bind:this={containerEl}
+	class="relative w-full h-full min-h-[420px] max-h-[75vh] bg-black rounded-2xl overflow-hidden shadow-2xl flex flex-col items-center justify-center select-none"
+>
 	<!-- Screen Reader Accessibility Announcer (WCAG SC 4.1.3) -->
 	<div aria-live="polite" class="sr-only">
 		{statusAnnouncement}
@@ -178,7 +161,10 @@
 
 		<!-- Visual Document Alignment Reticle & Shading -->
 		<div class="absolute inset-0 pointer-events-none flex items-center justify-center p-6">
-			<div class="relative w-full max-w-sm aspect-[3/4] border-2 border-dashed border-emerald-400/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
+			<div
+				bind:this={reticleEl}
+				class="relative w-full max-w-sm aspect-[3/4] border-2 border-dashed border-emerald-400/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"
+			>
 				<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 text-emerald-400 text-xs font-semibold px-3 py-0.5 rounded-full backdrop-blur-sm">
 					Align Slip Within Frame
 				</div>

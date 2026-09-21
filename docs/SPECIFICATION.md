@@ -230,6 +230,7 @@ the volume of receipts processed per month.
 | AC-18 | Dashboard Visual Charts | The 3 metric blocks (Cycle Spend, Monthly Target, Remaining Budget) are represented via a compact visual Donut/Pie Chart that maximizes screen real estate and visual comparative appeal with clean ZAR badges. |
 | AC-19 | Digital/Email Receipt Upload | A dedicated file upload option in `/capture` allows users to drag-and-drop or select receipt images from their device or email attachments without requiring a live camera feed. |
 | AC-20 | Multiple Payment Cards | Users can manage multiple payment cards/accounts for both Personal and Business entities in Settings (add, edit, delete, set default). The capture flow automatically pre-selects the default card and lists all cards, and expenses record the card used. |
+| AC-21 | Receipt OCR Preprocessing & Reticle Auto-Crop | Camera snapshots are automatically mapped and cropped to the visible reticle guide to eliminate background noise and boost optical resolution by 3x-4x. A dual-stream client filter pipeline applies grayscale luma weighting, local shadow division, auto-levels contrast stretching, and unsharp edge sharpening before sending the image to Workers AI with dynamic company category injection and SA till slip disambiguation rules, while preserving the natural color photo for R2 storage. |
 
 ---
 
@@ -242,7 +243,8 @@ the volume of receipts processed per month.
 | 1.0     | 16 Sep 2026  | Stefan van Dyk  | Approved | Baseline production delivery (AC-01 through AC-14).                                         |
 | 1.2     | 17 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-15 (Multi-User Company Collaboration & RBAC) and AC-16 (Personal Reimbursable Expenses). |
 | 1.3     | 18 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-17 (Dashboard Date Range Filter), AC-18 (Dashboard Visual Charts), and AC-19 (Dedicated Receipt Upload). |
-| 1.4     | 20 Sep 2026  | Senior DevOps / Arch | In Review | Added AC-20 (Multiple Payment Cards per Entity for Personal and Business profiles). |
+| 1.4     | 20 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-20 (Multiple Payment Cards per Entity for Personal and Business profiles). |
+| 1.5     | 21 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-21 (Receipt OCR Preprocessing, Reticle Auto-Crop, Dual-Stream Storage & AI Prompt Optimization). |
 
 ---
 

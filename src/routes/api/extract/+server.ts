@@ -2,18 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { eq } from 'drizzle-orm';
 import { getDb, category, company } from '$lib/server/db';
-import { sanitizeExtractedReceipt } from '$lib/domain/extraction';
-
-const EXTRACTION_SYSTEM_PROMPT = `
-You are an expert OCR financial receipt parser specializing in South African retail slips (e.g. Pick n Pay, Checkers, Woolworths, Spar, Engen, Shell, Total, Spur).
-Analyze this receipt image and extract the following:
-1. "vendor_name": The merchant name in clean title case (e.g. "Woolworths", "Checkers Hyper", "Engen Quickshop"). Strip "TAX INVOICE", "CASH SLIP", and "(Pty) Ltd".
-2. "amount": The final grand total paid in South African Rand as a decimal number (e.g. 349.50). Do not use the subtotal or VAT amount.
-3. "transaction_date": The transaction date in YYYY-MM-DD format.
-4. "suggested_category": The most appropriate category (e.g. "Groceries", "Fuel & Transport", "Dining & Entertainment", "Office Supplies & Tech", "Utilities & Home").
-
-Return ONLY a valid JSON object with keys: vendor_name, amount, transaction_date, suggested_category.
-`.trim();
+import { sanitizeExtractedReceipt, buildExtractionPrompt } from '$lib/domain/extraction';
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	if (!locals.user) {
@@ -39,6 +28,24 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			availableCategories = cats.map((c) => ({ id: c.id, name: c.name }));
 		}
 
+		// Fallback to categories sent directly in formData if DB returned empty or offline
+		if (availableCategories.length === 0) {
+			const categoriesParam = formData.get('categories');
+			if (categoriesParam && typeof categoriesParam === 'string') {
+				try {
+					const parsed = JSON.parse(categoriesParam);
+					if (Array.isArray(parsed) && parsed.length > 0) {
+						availableCategories = parsed;
+					}
+				} catch {
+					// ignore json parse error
+				}
+			}
+		}
+
+		const categoryNames = availableCategories.map((c) => c.name);
+		const dynamicPrompt = buildExtractionPrompt(categoryNames);
+
 		const imageBuffer = await imageFile.arrayBuffer();
 		const imageBytes = new Uint8Array(imageBuffer);
 
@@ -50,7 +57,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 				const response: any = await platform.env.AI.run(
 					'@cf/meta/llama-3.2-11b-vision-instruct',
 					{
-						prompt: EXTRACTION_SYSTEM_PROMPT,
+						prompt: dynamicPrompt,
 						image: [...imageBytes]
 					}
 				);

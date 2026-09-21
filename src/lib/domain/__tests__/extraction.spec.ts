@@ -3,7 +3,8 @@ import {
 	cleanVendorName,
 	normalizeDate,
 	suggestCategory,
-	sanitizeExtractedReceipt
+	sanitizeExtractedReceipt,
+	buildExtractionPrompt
 } from '../extraction';
 
 describe('Receipt AI Extraction & Category Matching Engine', () => {
@@ -113,6 +114,21 @@ describe('Receipt AI Extraction & Category Matching Engine', () => {
 			expect(result.vendorName).toBe('Unknown Vendor');
 			expect(result.amountCents).toBe(0);
 			expect(result.confidence).toBeLessThan(0.7);
+		});
+	});
+
+	describe('buildExtractionPrompt', () => {
+		it('injects user categories into the prompt when provided', () => {
+			const prompt = buildExtractionPrompt(['Groceries & Food', 'Office Tech', 'Fuel']);
+			expect(prompt).toContain('Choose the closest matching category from this list: "Groceries & Food", "Office Tech", "Fuel"');
+			expect(prompt).toContain('TOTAL DUE');
+			expect(prompt).toContain('Pick n Pay, Checkers, Woolworths');
+		});
+
+		it('provides fallback category advice when category list is empty', () => {
+			const prompt = buildExtractionPrompt([]);
+			expect(prompt).toContain('Assign an appropriate spending category');
+			expect(prompt).toContain('TOTAL DUE');
 		});
 	});
 });

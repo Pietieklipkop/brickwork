@@ -22,6 +22,30 @@ export interface CategoryOption {
 }
 
 /**
+ * Generates an optimized, domain-specific prompt for South African receipt extraction
+ * with dynamic category injection and till slip disambiguation rules.
+ */
+export function buildExtractionPrompt(categoryNames: string[] = []): string {
+	const categoryDirective =
+		categoryNames.length > 0
+			? `Choose the closest matching category from this list: ${categoryNames.map((c) => `"${c}"`).join(', ')}.`
+			: `Assign an appropriate spending category (e.g. "Groceries", "Fuel & Transport", "Dining & Entertainment", "Office Supplies & Tech", "Utilities & Home").`;
+
+	return `
+You are an expert financial OCR receipt parser specializing in South African till slips (e.g. Pick n Pay, Checkers, Woolworths, Spar, Engen, Shell, Total, Spur, Makro, Clicks, Dis-Chem).
+Analyze this receipt image and extract the following:
+1. "vendor_name": The clean merchant name in title case (e.g. "Woolworths", "Checkers Hyper", "Engen Quickshop"). Strip prefixes/suffixes like "TAX INVOICE", "CASH SLIP", "WELCOME TO", "(Pty) Ltd", "PTY LTD", "CC".
+2. "amount": The final grand total paid in South African Rand (ZAR) as a decimal number (e.g. 349.50).
+   - CRITICAL: Distinguish the grand total from the subtotal, 15% VAT breakdown, cash tendered, change, and promotional savings.
+   - Look for the primary final total line, labeled "TOTAL DUE", "BALANCE DUE", "TOTAL", "AMOUNT DUE", "CARD SALE", "MASTERCARD", "VISA", or the bottom-most grand total.
+3. "transaction_date": The transaction date in YYYY-MM-DD format. Look for dates in DD/MM/YYYY, DD-MM-YYYY, or YYYY-MM-DD format near the receipt header or register info.
+4. "suggested_category": ${categoryDirective}
+
+Return ONLY a valid JSON object with keys: vendor_name, amount, transaction_date, suggested_category.
+`.trim();
+}
+
+/**
  * Standard South African merchant keywords mapped to category name patterns
  */
 const VENDOR_CATEGORY_KEYWORDS: Record<string, string[]> = {
