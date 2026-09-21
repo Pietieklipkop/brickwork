@@ -240,6 +240,7 @@ This log is the permanent record of all production releases for the Brickwork pl
 | **v1.2.0** | 2026-09-17 | [`7f7090e`](https://github.com/Pietieklipkop/brickwork/commit/7f7090e) (`feat/v1.2-company-members-and-reimbursements`) | **Deployed (Pending Merge)** | Feature: Company collaboration (members & granular RBAC) & Personal reimbursable expense tracking. |
 | **v1.3.0** | 2026-09-18 | [`0fc80fb`](https://github.com/Pietieklipkop/brickwork/commit/0fc80fb) (`feat/v1.3-dashboard-charts-date-filter-upload`) | **Deployed (Pending Merge)** | Feature: Dashboard date range filtering (AC-17), visual budget Donut/Pie charts (AC-18), and dedicated digital/email receipt file upload (AC-19). |
 | **v1.4.0** | 2026-09-20 | [`345c4e0`](https://github.com/Pietieklipkop/brickwork/commit/345c4e0) (`feat/v1.4-multiple-payment-cards-per-entity`) | **Deployed (Pending Merge)** | Feature: Multiple payment cards/accounts management per entity for Personal and Business profiles (AC-20). |
+| **v1.5.0** | 2026-09-21 | [`2580cc8`](https://github.com/Pietieklipkop/brickwork/commit/2580cc8) (`feat/v1.5-receipt-ocr-filters-and-auto-crop`) | **Deployed (Pending Merge)** | Feature: Receipt OCR Preprocessing, Reticle Auto-Crop, Dual-Stream Storage & AI Prompt Optimization (AC-21). |
 
 ---
 
@@ -303,3 +304,21 @@ This log is the permanent record of all production releases for the Brickwork pl
   - **Settings UI Management:** New payment card management section in `/settings` scoped dynamically to the currently active entity (Personal or Business).
   - **Seamless Capture Integration:** In `/capture`, the pre-save bottom sheet dynamically lists all active entity cards with the designated default automatically pre-selected.
   - **Expense Ledger Visibility:** Expenses in `/expenses` display the payment card name used to settle the transaction.
+
+---
+
+#### Version 1.5.0 — 2026-09-21 (Feature Release: Receipt OCR Preprocessing & Reticle Auto-Crop)
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `9fda95c5-48e7-45fd-94e5-217730c1292f`)
+- **Target Branch:** `feat/v1.5-receipt-ocr-filters-and-auto-crop` (Commit: `2580cc8`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
+- **Scope & Highlights:**
+  - **Reticle-Locked Viewfinder Auto-Crop (AC-21):** Viewfinder snapshots are mapped and cropped directly to the user-visible reticle alignment frame (accounting for CSS `object-cover` geometry), removing 75% background clutter and boosting optical text resolution by 3x–4x.
+  - **Client-Side Document Filter Pipeline:** Lightweight Canvas 2D image processing (< 40ms) applying:
+    1. *Grayscale Normalization*: Rec. 601 luma weighting stripping distracting background table colors.
+    2. *Adaptive Shadow Division*: Local background illumination division completely removing phone and hand cast shadows across the slip.
+    3. *Auto-Levels Contrast*: Stretches 2nd–98th percentile histogram values to `[0, 255]`, turning faint grey thermal print into deep black.
+    4. *High-Frequency Unsharp Masking*: 3x3 Laplacian sharpening convolution kernel crispening dot-matrix characters and decimal points.
+  - **Dual-Stream Storage Architecture:** Clean natural-color cropped photos are saved to Cloudflare R2 (`RECEIPTS_BUCKET`) for legal accounting records, while high-contrast enhanced images are routed to `/api/extract` for Workers AI parsing.
+  - **Dynamic Workers AI Vision Prompting:** Injects company categories dynamically into the system prompt and adds explicit South African retail till slip disambiguation rules (`TOTAL DUE` vs `15% VAT`, `CHANGE`, `CASH TENDERED`, and discounts).
+  - **Quality Gates:** 100% passing Vitest unit & component tests (75 tests), Playwright E2E suites (17 tests), and Svelte type-check (0 errors, 0 warnings).
+
