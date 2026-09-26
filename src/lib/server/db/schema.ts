@@ -107,6 +107,7 @@ export const paymentAccount = sqliteTable(
 			.notNull()
 			.references(() => company.id, { onDelete: 'cascade' }),
 		name: text('name').notNull(),
+		cardNumber: text('card_number'), // Optional card digits/number for OCR detection & auto-matching
 		isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)

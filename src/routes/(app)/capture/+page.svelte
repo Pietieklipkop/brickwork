@@ -53,12 +53,24 @@
 			const form = new FormData();
 			// Send the preprocessed, shadow-removed, high-contrast crop to the OCR engine
 			form.append('image', ocrFile || file);
+			form.append('companyId', data.activeCompany.id);
 			form.append(
 				'categories',
 				JSON.stringify(
 					data.categories.map((c) => ({
 						id: c.id,
 						name: c.name
+					}))
+				)
+			);
+			form.append(
+				'paymentAccounts',
+				JSON.stringify(
+					data.paymentAccounts.map((a) => ({
+						id: a.id,
+						name: a.name,
+						cardNumber: a.cardNumber,
+						isDefault: Boolean(a.isDefault)
 					}))
 				)
 			);

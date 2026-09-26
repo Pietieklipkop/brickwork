@@ -622,3 +622,40 @@ export async function processUploadedImageFile(
 		reader.readAsDataURL(file);
 	});
 }
+
+/**
+ * Computes the Laplacian focus variance to quantify image edge sharpness and detect motion blur.
+ * Higher score indicates sharper text edges without handheld camera shake.
+ */
+export function calculateSharpnessScore(gray: Uint8Array, width: number, height: number): number {
+	if (width < 5 || height < 5) return 0;
+
+	let sum = 0;
+	let sumSq = 0;
+	let count = 0;
+
+	const stride = Math.max(1, Math.floor(Math.min(width, height) / 200));
+
+	for (let y = 1; y < height - 1; y += stride) {
+		const rowOffset = y * width;
+		const prevRow = (y - 1) * width;
+		const nextRow = (y + 1) * width;
+
+		for (let x = 1; x < width - 1; x += stride) {
+			const center = gray[rowOffset + x];
+			const top = gray[prevRow + x];
+			const bottom = gray[nextRow + x];
+			const left = gray[rowOffset + x - 1];
+			const right = gray[rowOffset + x + 1];
+
+			const lap = Math.abs(4 * center - top - bottom - left - right);
+			sum += lap;
+			sumSq += lap * lap;
+			count++;
+		}
+	}
+
+	if (count === 0) return 0;
+	const mean = sum / count;
+	return Math.max(0, (sumSq / count) - (mean * mean));
+}

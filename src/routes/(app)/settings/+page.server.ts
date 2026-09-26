@@ -511,6 +511,7 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const companyId = String(data.get('companyId') || '');
 		const name = String(data.get('name') || '').trim();
+		const cardNumber = String(data.get('cardNumber') || '').trim() || null;
 		const isDefault = data.get('isDefault') === 'true' || data.get('isDefault') === 'on';
 
 		if (!companyId || !name) {
@@ -559,6 +560,7 @@ export const actions: Actions = {
 			id: crypto.randomUUID(),
 			companyId,
 			name,
+			cardNumber,
 			isDefault: shouldBeDefault
 		});
 
@@ -573,6 +575,7 @@ export const actions: Actions = {
 		const data = await request.formData();
 		const id = String(data.get('id') || '');
 		const name = String(data.get('name') || '').trim();
+		const cardNumber = String(data.get('cardNumber') || '').trim() || null;
 
 		if (!id || !name) {
 			return fail(400, { error: 'Card ID and name are required.' });
@@ -611,7 +614,7 @@ export const actions: Actions = {
 
 		await db
 			.update(paymentAccountTable)
-			.set({ name, updatedAt: new Date() })
+			.set({ name, cardNumber, updatedAt: new Date() })
 			.where(eq(paymentAccountTable.id, id));
 
 		return { success: true };

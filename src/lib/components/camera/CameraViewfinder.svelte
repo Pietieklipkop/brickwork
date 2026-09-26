@@ -16,6 +16,9 @@
 	let stream: MediaStream | null = $state(null);
 	let cameraActive = $state(false);
 	let cameraError = $state('');
+	let hasTorch = $state(false);
+	let isTorchOn = $state(false);
+	let slipAspect: 'standard' | 'long' = $state('standard');
 	let statusAnnouncement = $state('Camera ready. Align receipt within frame.');
 
 	onMount(async () => {
@@ -43,6 +46,12 @@
 					videoEl.srcObject = stream;
 					await videoEl.play();
 					cameraActive = true;
+
+					const track = stream.getVideoTracks()[0];
+					if (track) {
+						const caps = (track.getCapabilities ? track.getCapabilities() : {}) as any;
+						hasTorch = Boolean(caps.torch);
+					}
 				}
 			} else {
 				cameraActive = false;
@@ -54,12 +63,28 @@
 		}
 	}
 
+	async function toggleTorch() {
+		if (!stream) return;
+		const track = stream.getVideoTracks()[0];
+		if (!track) return;
+		try {
+			isTorchOn = !isTorchOn;
+			await (track.applyConstraints as any)({
+				advanced: [{ torch: isTorchOn }]
+			});
+		} catch (err) {
+			console.warn('Could not toggle torch:', err);
+			isTorchOn = false;
+		}
+	}
+
 	function stopCamera() {
 		if (stream) {
 			stream.getTracks().forEach((track) => track.stop());
 			stream = null;
 		}
 		cameraActive = false;
+		isTorchOn = false;
 	}
 
 	async function takeSnapshot() {
@@ -159,14 +184,58 @@
 			class="w-full h-full object-cover"
 		></video>
 
+		<!-- Top Controls Bar: Aspect Ratio Toggle & Torch Control -->
+		<div class="absolute top-4 left-0 right-0 z-20 flex items-center justify-between px-5 pointer-events-auto">
+			<!-- Aspect Ratio Pill -->
+			<div class="flex items-center p-0.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 shadow-lg text-[11px] font-bold">
+				<button
+					type="button"
+					onclick={() => (slipAspect = 'standard')}
+					class="px-3 py-1 rounded-full transition-colors {slipAspect === 'standard'
+						? 'bg-emerald-500 text-slate-950 shadow-xs'
+						: 'text-slate-300 hover:text-white'}"
+				>
+					Standard 3:4
+				</button>
+				<button
+					type="button"
+					onclick={() => (slipAspect = 'long')}
+					class="px-3 py-1 rounded-full transition-colors {slipAspect === 'long'
+						? 'bg-emerald-500 text-slate-950 shadow-xs'
+						: 'text-slate-300 hover:text-white'}"
+				>
+					Long Slip
+				</button>
+			</div>
+
+			<!-- Torch / Flashlight Toggle Button -->
+			{#if hasTorch}
+				<button
+					type="button"
+					onclick={toggleTorch}
+					class="p-2.5 rounded-full transition-all backdrop-blur-md shadow-lg border {isTorchOn
+						? 'bg-amber-400 text-slate-950 border-amber-300 ring-4 ring-amber-400/30'
+						: 'bg-slate-900/80 text-white border-slate-700/60 hover:bg-slate-800'}"
+					aria-label={isTorchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+					title={isTorchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+				>
+					<svg class="w-5 h-5" viewBox="0 0 24 24" fill={isTorchOn ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M18 6c0 2-2 4-2 7v6a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-6c0-3-2-5-2-7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/>
+						<line x1="6" x2="18" y1="6" y2="6"/>
+						<line x1="12" x2="12" y1="12" y2="12"/>
+					</svg>
+				</button>
+			{/if}
+		</div>
+
 		<!-- Visual Document Alignment Reticle & Shading -->
 		<div class="absolute inset-0 pointer-events-none flex items-center justify-center p-6">
 			<div
 				bind:this={reticleEl}
-				class="relative w-full max-w-sm aspect-[3/4] border-2 border-dashed border-emerald-400/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"
+				class="relative w-full transition-all duration-300 border-2 border-dashed border-emerald-400/80 rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] {slipAspect === 'standard' ? 'max-w-sm aspect-[3/4]' : 'max-w-[260px] aspect-[1/2.2]'}"
 			>
-				<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 text-emerald-400 text-xs font-semibold px-3 py-0.5 rounded-full backdrop-blur-sm">
-					Align Slip Within Frame
+				<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 text-emerald-400 text-xs font-semibold px-3 py-0.5 rounded-full backdrop-blur-sm whitespace-nowrap">
+					{slipAspect === 'long' ? 'Align Long Slip Within Frame' : 'Align Slip Within Frame'}
 				</div>
 
 				<!-- Reticle Corner Accents -->

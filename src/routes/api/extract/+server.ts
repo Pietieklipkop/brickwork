@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { eq } from 'drizzle-orm';
-import { getDb, category, company } from '$lib/server/db';
+import { getDb, category, paymentAccount } from '$lib/server/db';
 import { sanitizeExtractedReceipt, buildExtractionPrompt } from '$lib/domain/extraction';
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
@@ -18,17 +18,30 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			return json({ error: 'No image provided for receipt extraction.' }, { status: 400 });
 		}
 
-		// Load available categories for this company for heuristic category recommendation
+		// Load available categories and payment accounts for this company
 		let availableCategories: { id: string; name: string }[] = [];
+		let availableAccounts: Array<{ id: string; name: string; cardNumber: string | null; isDefault: boolean }> = [];
+
 		if (platform?.env?.DB && companyId) {
 			const db = getDb(platform.env.DB);
 			const cats = await db.query.category.findMany({
 				where: eq(category.companyId, companyId)
 			});
 			availableCategories = cats.map((c) => ({ id: c.id, name: c.name }));
+
+			const accounts = await db
+				.select()
+				.from(paymentAccount)
+				.where(eq(paymentAccount.companyId, companyId));
+			availableAccounts = accounts.map((a) => ({
+				id: a.id,
+				name: a.name,
+				cardNumber: a.cardNumber,
+				isDefault: Boolean(a.isDefault)
+			}));
 		}
 
-		// Fallback to categories sent directly in formData if DB returned empty or offline
+		// Fallback to categories and accounts sent directly in formData if DB returned empty or offline
 		if (availableCategories.length === 0) {
 			const categoriesParam = formData.get('categories');
 			if (categoriesParam && typeof categoriesParam === 'string') {
@@ -39,6 +52,20 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 					}
 				} catch {
 					// ignore json parse error
+				}
+			}
+		}
+
+		if (availableAccounts.length === 0) {
+			const accountsParam = formData.get('paymentAccounts');
+			if (accountsParam && typeof accountsParam === 'string') {
+				try {
+					const parsed = JSON.parse(accountsParam);
+					if (Array.isArray(parsed) && parsed.length > 0) {
+						availableAccounts = parsed;
+					}
+				} catch {
+					// ignore
 				}
 			}
 		}
@@ -58,7 +85,9 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 					'@cf/meta/llama-3.2-11b-vision-instruct',
 					{
 						prompt: dynamicPrompt,
-						image: [...imageBytes]
+						image: [...imageBytes],
+						max_tokens: 512,
+						temperature: 0.1
 					}
 				);
 
@@ -78,7 +107,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			};
 		}
 
-		const sanitized = sanitizeExtractedReceipt(rawOutput, availableCategories);
+		const sanitized = sanitizeExtractedReceipt(rawOutput, availableCategories, availableAccounts);
 
 		return json({
 			success: true,

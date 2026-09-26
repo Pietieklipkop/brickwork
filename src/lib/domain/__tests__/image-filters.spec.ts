@@ -6,7 +6,8 @@ import {
 	autoLevelsContrast,
 	applySharpenFilter,
 	enhanceReceiptPixels,
-	detectDocumentBoundingBox
+	detectDocumentBoundingBox,
+	calculateSharpnessScore
 } from '../image-filters';
 
 describe('Image Preprocessing & OCR Enhancement Pipeline', () => {
@@ -200,6 +201,29 @@ describe('Image Preprocessing & OCR Enhancement Pipeline', () => {
 				expect(bbox.width).toBeGreaterThanOrEqual(40);
 				expect(bbox.height).toBeGreaterThanOrEqual(50);
 			}
+		});
+	});
+
+	describe('calculateSharpnessScore', () => {
+		it('assigns a significantly higher focus score to sharp edges than blurred flat regions', () => {
+			const width = 50;
+			const height = 50;
+
+			// Flat/blurred image (uniform luminance)
+			const blurred = new Uint8Array(width * height).fill(128);
+			const blurredScore = calculateSharpnessScore(blurred, width, height);
+
+			// Sharp image with high-contrast text edges
+			const sharp = new Uint8Array(width * height).fill(220);
+			for (let y = 10; y < 40; y += 4) {
+				for (let x = 10; x < 40; x++) {
+					sharp[y * width + x] = 30; // dark printed lines
+				}
+			}
+			const sharpScore = calculateSharpnessScore(sharp, width, height);
+
+			expect(blurredScore).toBe(0);
+			expect(sharpScore).toBeGreaterThan(100);
 		});
 	});
 });

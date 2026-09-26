@@ -63,7 +63,7 @@
 		amountCents = extractedData.amountCents || 0;
 		transactionDate = extractedData.transactionDate || new Date().toISOString().split('T')[0];
 		categoryId = extractedData.suggestedCategoryId || categories[0]?.id || '';
-		accountId = paymentAccounts.find((a) => a.isDefault)?.id || paymentAccounts[0]?.id || '';
+		accountId = extractedData.suggestedAccountId || paymentAccounts.find((a) => a.isDefault)?.id || paymentAccounts[0]?.id || '';
 		if (businessCompanies.length > 0 && !reimbursableCompanyId) {
 			reimbursableCompanyId = businessCompanies[0].id;
 		}
@@ -231,9 +231,17 @@
 
 				{#if paymentAccounts.length > 0}
 					<div>
-						<label for="review-account" class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-							Paid With
-						</label>
+						<div class="flex items-center justify-between mb-1">
+							<label for="review-account" class="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+								Paid With
+							</label>
+							{#if extractedData.suggestedAccountId && accountId === extractedData.suggestedAccountId}
+								<span class="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 flex items-center space-x-1">
+									<svg class="w-3 h-3 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+									<span>Auto-matched from slip</span>
+								</span>
+							{/if}
+						</div>
 						<select
 							id="review-account"
 							bind:value={accountId}

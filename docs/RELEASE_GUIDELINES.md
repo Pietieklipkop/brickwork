@@ -322,3 +322,19 @@ This log is the permanent record of all production releases for the Brickwork pl
   - **Dynamic Workers AI Vision Prompting:** Injects company categories dynamically into the system prompt and adds explicit South African retail till slip disambiguation rules (`TOTAL DUE` vs `15% VAT`, `CHANGE`, `CASH TENDERED`, and discounts).
   - **Quality Gates:** 100% passing Vitest unit & component tests (75 tests), Playwright E2E suites (17 tests), and Svelte type-check (0 errors, 0 warnings).
 
+---
+
+#### Version 1.6.0 — 2026-09-26 (Feature Release: Payment Card Detection, Torch Control & Resilient Receipt OCR)
+- **Deployment Status:** Ready for deployment to Cloudflare Workers
+- **Target Branch:** `feat/v1.6-card-detection-torch-and-robust-ocr`
+- **Scope & Highlights:**
+  - **Payment Card Detection & Auto-Matching (AC-22):** The receipt OCR engine automatically extracts card digits (e.g. `0855`, `5851`, `1357`) and payment brand (`Visa Credit`, `Mastercard`), and auto-selects the matching company card in `PreSaveBottomSheet`. Displays an `Auto-matched from slip` badge.
+  - **Optional Card Number Field in Settings:** Added an optional `cardNumber` input field when creating or editing payment cards in `/settings`. Strictly non-mandatory per user privacy preference.
+  - **D1 Migration `0002_add_card_number_to_payment_account.sql`:** Applied to both local and remote Cloudflare D1 databases.
+  - **Resilient Multi-Format Extraction Parser:** Fixed critical bug where Llama-3.2-Vision conversational Markdown output (e.g. `**Vendor Name:** Crave and Co`, `**Amount:** 35.00`) caused JSON parsing to fail and default to `Unknown Vendor` and `R0.00`. Added line-by-line fallback key-value extraction and token-based category matching.
+  - **Car Ergonomics: Hardware Torch / Flashlight Toggle:** Added an in-viewfinder flashlight toggle button utilizing `MediaStreamTrack.applyConstraints({ advanced: [{ torch: true }] })` to provide illumination in dark car interiors.
+  - **Car Ergonomics: Aspect Ratio Toggle:** Added in-viewfinder switcher between `Standard (3:4)` and `Long Slip (1:2.2)` to ensure long till slips (grocery & restaurant receipts) are captured without cutting off totals or card numbers.
+  - **Motion Blur & Focus Quantification:** Implemented `calculateSharpnessScore` using Laplacian focus variance to measure edge sharpness.
+  - **Optimized Workers AI Inference:** Configured `max_tokens: 512, temperature: 0.1` and explicit year/dot-matrix digit disambiguation prompting.
+  - **Quality Gates:** 100% passing Vitest tests (80 unit & component tests), 100% passing Playwright E2E suites (17 tests), and Svelte type-check (0 errors, 0 warnings).
+

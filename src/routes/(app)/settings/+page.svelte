@@ -48,6 +48,7 @@
 	// Payment Card Management State (AC-20)
 	let showAddCard = $state(false);
 	let newCardName = $state('');
+	let newCardNumber = $state('');
 	let newCardIsDefault = $state(false);
 	let isCreatingCard = $state(false);
 	let cardError = $state('');
@@ -55,6 +56,7 @@
 
 	let editingCard: any = $state(null);
 	let editCardName = $state('');
+	let editCardNumber = $state('');
 	let isUpdatingCard = $state(false);
 
 	const PRESET_COLORS = [
@@ -355,6 +357,7 @@
 		const form = new FormData();
 		form.append('companyId', data.activeCompany.id);
 		form.append('name', newCardName.trim());
+		form.append('cardNumber', newCardNumber.trim());
 		form.append('isDefault', String(newCardIsDefault));
 
 		try {
@@ -367,6 +370,7 @@
 			if (result?.type === 'success' || res.ok) {
 				showAddCard = false;
 				newCardName = '';
+				newCardNumber = '';
 				newCardIsDefault = false;
 				cardSuccess = 'Payment card added successfully!';
 				await invalidateAll();
@@ -383,6 +387,7 @@
 	function startEditCard(card: any) {
 		editingCard = card;
 		editCardName = card.name;
+		editCardNumber = card.cardNumber || '';
 		cardError = '';
 		cardSuccess = '';
 	}
@@ -397,6 +402,7 @@
 		const form = new FormData();
 		form.append('id', editingCard.id);
 		form.append('name', editCardName.trim());
+		form.append('cardNumber', editCardNumber.trim());
 
 		try {
 			const res = await fetch('/settings?/updatePaymentAccount', {
@@ -857,17 +863,30 @@
 						/>
 					</div>
 
-					<div class="flex items-center space-x-2 py-2">
-						<input
-							id="new-card-default-toggle"
-							type="checkbox"
-							bind:checked={newCardIsDefault}
-							class="toggle toggle-primary toggle-sm"
-						/>
-						<label for="new-card-default-toggle" class="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
-							Set as default card
+					<div>
+						<label for="new-card-number" class="block text-xs font-semibold mb-1">
+							Card Digits / Number <span class="text-slate-400 font-normal">(Optional)</span>
 						</label>
+						<input
+							id="new-card-number"
+							type="text"
+							bind:value={newCardNumber}
+							placeholder="e.g. 5851 or last 4 digits"
+							class="input input-bordered input-sm w-full h-10 text-xs font-mono"
+						/>
 					</div>
+				</div>
+
+				<div class="flex items-center space-x-2 py-1">
+					<input
+						id="new-card-default-toggle"
+						type="checkbox"
+						bind:checked={newCardIsDefault}
+						class="toggle toggle-primary toggle-sm"
+					/>
+					<label for="new-card-default-toggle" class="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+						Set as default card
+					</label>
 				</div>
 
 				<div class="flex items-center justify-end space-x-2 pt-2">
@@ -912,6 +931,11 @@
 							<div>
 								<div class="flex items-center space-x-2">
 									<span class="text-sm font-bold text-slate-900 dark:text-white">{card.name}</span>
+									{#if card.cardNumber}
+										<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+											•••• {card.cardNumber.length > 4 ? card.cardNumber.slice(-4) : card.cardNumber}
+										</span>
+									{/if}
 									{#if card.isDefault}
 										<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
 											Default
@@ -1271,6 +1295,19 @@
 						required
 						bind:value={editCardName}
 						class="input input-bordered w-full h-11 text-sm bg-slate-50 dark:bg-slate-800 font-semibold"
+					/>
+				</div>
+
+				<div>
+					<label for="edit-card-number" class="block text-xs font-semibold mb-1">
+						Card Digits / Number <span class="text-slate-400 font-normal">(Optional)</span>
+					</label>
+					<input
+						id="edit-card-number"
+						type="text"
+						bind:value={editCardNumber}
+						placeholder="e.g. 5851 or last 4 digits"
+						class="input input-bordered w-full h-11 text-sm bg-slate-50 dark:bg-slate-800 font-mono"
 					/>
 				</div>
 
