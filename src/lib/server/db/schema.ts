@@ -256,3 +256,64 @@ export const passwordResetTokenRelations = relations(passwordResetToken, ({ one 
 		references: [user.id]
 	})
 }));
+
+/**
+ * OCR Accuracy Log Table (AC-23)
+ * Tracks user modifications to AI-extracted receipt fields for longitudinal accuracy auditing.
+ */
+export const ocrAccuracyLog = sqliteTable(
+	'ocr_accuracy_log',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		expenseId: text('expense_id').references(() => expense.id, { onDelete: 'cascade' }),
+		companyId: text('company_id')
+			.notNull()
+			.references(() => company.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		status: text('status').notNull(), // 'full_success' | 'partial_fail' | 'total_fail'
+		fieldsChangedCount: integer('fields_changed_count').notNull(), // 0 to 4
+		vendorExtracted: text('vendor_extracted'),
+		vendorFinal: text('vendor_final').notNull(),
+		vendorChanged: integer('vendor_changed', { mode: 'boolean' }).notNull(),
+		amountExtractedCents: integer('amount_extracted_cents'),
+		amountFinalCents: integer('amount_final_cents').notNull(),
+		amountChanged: integer('amount_changed', { mode: 'boolean' }).notNull(),
+		dateExtracted: text('date_extracted'),
+		dateFinal: text('date_final').notNull(),
+		dateChanged: integer('date_changed', { mode: 'boolean' }).notNull(),
+		categoryExtractedId: text('category_extracted_id'),
+		categoryFinalId: text('category_final_id').notNull(),
+		categoryChanged: integer('category_changed', { mode: 'boolean' }).notNull(),
+		rawOcrPayload: text('raw_ocr_payload'),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull()
+	},
+	(table) => [
+		index('idx_ocr_accuracy_company').on(table.companyId, table.createdAt),
+		index('idx_ocr_accuracy_status').on(table.status)
+	]
+);
+
+export const ocrAccuracyLogRelations = relations(ocrAccuracyLog, ({ one }) => ({
+	expense: one(expense, {
+		fields: [ocrAccuracyLog.expenseId],
+		references: [expense.id]
+	}),
+	company: one(company, {
+		fields: [ocrAccuracyLog.companyId],
+		references: [company.id]
+	}),
+	user: one(user, {
+		fields: [ocrAccuracyLog.userId],
+		references: [user.id]
+	}),
+	categoryFinal: one(category, {
+		fields: [ocrAccuracyLog.categoryFinalId],
+		references: [category.id]
+	})
+}));

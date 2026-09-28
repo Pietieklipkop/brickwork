@@ -59,6 +59,28 @@
 	let editCardNumber = $state('');
 	let isUpdatingCard = $state(false);
 
+	// OCR Accuracy Metrics State (AC-23)
+	let ocrStatusFilter = $state<'all' | 'full_success' | 'partial_fail' | 'total_fail'>('all');
+	let filteredOcrLogs = $derived(
+		(data.ocrLogs || []).filter((log: any) => {
+			if (ocrStatusFilter === 'all') return true;
+			return log.status === ocrStatusFilter;
+		})
+	);
+
+	function formatLogTimestamp(ts: any): string {
+		if (!ts) return '—';
+		const d = new Date(ts);
+		if (isNaN(d.getTime())) return '—';
+		return d.toLocaleDateString('en-ZA', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
 	const PRESET_COLORS = [
 		'#0B2240', '#10B981', '#0284C7', '#F59E0B', '#8B5CF6', '#EC4899', '#64748B', '#E11D48'
 	];
@@ -1129,7 +1151,299 @@
 	{/if}
 
 
-	<!-- 4. User Profile & Sign Out -->
+	<!-- 6. AI OCR Extraction Accuracy & Audit Metrics (AC-23) -->
+	<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+		<div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 gap-3">
+			<div>
+				<div class="flex items-center space-x-2">
+					<h2 class="text-base font-bold text-slate-900 dark:text-white">
+						AI Receipt OCR Extraction Accuracy
+					</h2>
+					<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+						AC-23
+					</span>
+				</div>
+				<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+					Audits AI receipt parsing accuracy against your saved expense edits. Full Success indicates all 4 fields (Vendor, Amount, Date, Category) matched your final submission. Partial Fail indicates 1–3 fields were modified, and Total Fail means all 4 fields were changed.
+				</p>
+			</div>
+
+			<!-- Filter tabs -->
+			<div class="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs font-semibold shrink-0">
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'all')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'all'
+						? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+						: 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}"
+				>
+					All ({data.ocrStats?.totalScans ?? 0})
+				</button>
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'full_success')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'full_success'
+						? 'bg-emerald-500 text-white shadow-xs font-bold'
+						: 'text-emerald-700 dark:text-emerald-400 hover:text-emerald-900'}"
+				>
+					Success ({data.ocrStats?.fullSuccessCount ?? 0})
+				</button>
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'partial_fail')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'partial_fail'
+						? 'bg-amber-500 text-white shadow-xs font-bold'
+						: 'text-amber-700 dark:text-amber-400 hover:text-amber-900'}"
+				>
+					Partial ({data.ocrStats?.partialFailCount ?? 0})
+				</button>
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'total_fail')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'total_fail'
+						? 'bg-rose-500 text-white shadow-xs font-bold'
+						: 'text-rose-700 dark:text-rose-400 hover:text-rose-900'}"
+				>
+					Fail ({data.ocrStats?.totalFailCount ?? 0})
+				</button>
+			</div>
+		</div>
+
+		<!-- Aggregate Metric Cards -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+			<!-- Total Scans -->
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 space-y-1">
+				<span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Scans</span>
+				<div class="text-2xl font-black text-slate-900 dark:text-white">
+					{data.ocrStats?.totalScans ?? 0}
+				</div>
+				<p class="text-[10px] text-slate-500">Historical analyzed receipts</p>
+			</div>
+
+			<!-- Full Success Rate -->
+			<div class="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-1">
+				<div class="flex items-center justify-between">
+					<span class="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Full Success</span>
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
+						0 changes
+					</span>
+				</div>
+				<div class="text-2xl font-black text-emerald-700 dark:text-emerald-400">
+					{data.ocrStats?.fullSuccessRate ?? 0}%
+				</div>
+				<p class="text-[10px] text-emerald-600 dark:text-emerald-500">
+					{data.ocrStats?.fullSuccessCount ?? 0} of {data.ocrStats?.totalScans ?? 0} receipts accurate
+				</p>
+			</div>
+
+			<!-- Partial Fail Rate -->
+			<div class="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-1">
+				<div class="flex items-center justify-between">
+					<span class="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Partial Fail</span>
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+						1–3 changes
+					</span>
+				</div>
+				<div class="text-2xl font-black text-amber-700 dark:text-amber-400">
+					{data.ocrStats?.partialFailRate ?? 0}%
+				</div>
+				<p class="text-[10px] text-amber-600 dark:text-amber-500">
+					{data.ocrStats?.partialFailCount ?? 0} of {data.ocrStats?.totalScans ?? 0} required tweaks
+				</p>
+			</div>
+
+			<!-- Total Fail Rate -->
+			<div class="p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 space-y-1">
+				<div class="flex items-center justify-between">
+					<span class="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">Total Fail</span>
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200">
+						4 changes
+					</span>
+				</div>
+				<div class="text-2xl font-black text-rose-700 dark:text-rose-400">
+					{data.ocrStats?.totalFailRate ?? 0}%
+				</div>
+				<p class="text-[10px] text-rose-600 dark:text-rose-500">
+					{data.ocrStats?.totalFailCount ?? 0} of {data.ocrStats?.totalScans ?? 0} all fields changed
+				</p>
+			</div>
+		</div>
+
+		<!-- Field-by-Field Accuracy Rates -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Vendor:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.vendorAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.vendorAccuracyRate ?? 0}%
+				</span>
+			</div>
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Amount:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.amountAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.amountAccuracyRate ?? 0}%
+				</span>
+			</div>
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Date:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.dateAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.dateAccuracyRate ?? 0}%
+				</span>
+			</div>
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Category:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.categoryAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.categoryAccuracyRate ?? 0}%
+				</span>
+			</div>
+		</div>
+
+		<!-- Historical Audit Log Table -->
+		<div class="space-y-2">
+			<div class="flex items-center justify-between">
+				<h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Extraction Audit History ({filteredOcrLogs.length} scans)
+				</h3>
+				<span class="text-[11px] text-slate-400 hidden sm:inline">
+					Strike-through indicates fields user modified
+				</span>
+			</div>
+
+			<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+				<table class="w-full text-left text-xs">
+					<thead class="bg-slate-100/80 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+						<tr>
+							<th class="py-3 px-3.5 whitespace-nowrap">Scanned</th>
+							<th class="py-3 px-3 whitespace-nowrap">Result</th>
+							<th class="py-3 px-3">Vendor</th>
+							<th class="py-3 px-3">Amount</th>
+							<th class="py-3 px-3">Date</th>
+							<th class="py-3 px-3">Category</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+						{#if filteredOcrLogs.length === 0}
+							<tr>
+								<td colspan="6" class="py-8 text-center text-slate-400">
+									{#if data.ocrLogs?.length === 0}
+										No receipt scans recorded yet for {data.activeCompany.name}. Capture a receipt to populate accuracy metrics.
+									{:else}
+										No receipts found for filter "{ocrStatusFilter}".
+									{/if}
+								</td>
+							</tr>
+						{:else}
+							{#each filteredOcrLogs as log (log.id)}
+								<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+									<!-- Timestamp -->
+									<td class="py-3 px-3.5 whitespace-nowrap text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+										{formatLogTimestamp(log.createdAt)}
+									</td>
+
+									<!-- Status Badge -->
+									<td class="py-3 px-3 whitespace-nowrap">
+										{#if log.status === 'full_success'}
+											<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+												<svg class="w-3 h-3 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+												Full Success (0/4)
+											</span>
+										{:else if log.status === 'partial_fail'}
+											<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+												<svg class="w-3 h-3 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+												Partial Fail ({log.fieldsChangedCount}/4)
+											</span>
+										{:else}
+											<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+												<svg class="w-3 h-3 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+												Total Fail (4/4)
+											</span>
+										{/if}
+									</td>
+
+									<!-- Vendor Name -->
+									<td class="py-3 px-3 max-w-[170px]">
+										{#if log.vendorChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through truncate" title="AI Extracted: {log.vendorExtracted || 'Unknown'}">
+													{log.vendorExtracted || 'Unknown'}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 truncate flex items-center gap-1" title="Saved: {log.vendorFinal}">
+													<span class="text-slate-400 font-normal">→</span> {log.vendorFinal}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 truncate" title="{log.vendorFinal}">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span class="truncate">{log.vendorFinal}</span>
+											</div>
+										{/if}
+									</td>
+
+									<!-- Amount -->
+									<td class="py-3 px-3 whitespace-nowrap font-mono">
+										{#if log.amountChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through">
+													{centsToZar(log.amountExtractedCents ?? 0)}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+													<span class="text-slate-400 font-normal">→</span> {centsToZar(log.amountFinalCents)}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span>{centsToZar(log.amountFinalCents)}</span>
+											</div>
+										{/if}
+									</td>
+
+									<!-- Date -->
+									<td class="py-3 px-3 whitespace-nowrap font-mono">
+										{#if log.dateChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through">
+													{log.dateExtracted || 'None'}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+													<span class="text-slate-400 font-normal">→</span> {log.dateFinal}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span>{log.dateFinal}</span>
+											</div>
+										{/if}
+									</td>
+
+									<!-- Category -->
+									<td class="py-3 px-3 max-w-[160px]">
+										{#if log.categoryChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through truncate" title="AI Extracted: {log.categoryExtractedName}">
+													{log.categoryExtractedName}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 truncate flex items-center gap-1" title="Saved: {log.categoryFinalName}">
+													<span class="text-slate-400 font-normal">→</span> {log.categoryFinalName}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 truncate" title="{log.categoryFinalName}">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span class="truncate">{log.categoryFinalName}</span>
+											</div>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</section>
+
+	<!-- 7. User Profile & Sign Out -->
 	<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
 		<div class="border-b border-slate-100 dark:border-slate-800 pb-3">
 			<h2 class="text-base font-bold text-slate-900 dark:text-white">

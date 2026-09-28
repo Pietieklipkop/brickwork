@@ -28,3 +28,6 @@ export type NewExpense = typeof schema.expense.$inferInsert;
 
 export type PasswordResetToken = typeof schema.passwordResetToken.$inferSelect;
 export type NewPasswordResetToken = typeof schema.passwordResetToken.$inferInsert;
+
+export type OcrAccuracyLog = typeof schema.ocrAccuracyLog.$inferSelect;
+export type NewOcrAccuracyLog = typeof schema.ocrAccuracyLog.$inferInsert;

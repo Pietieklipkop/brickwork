@@ -1,9 +1,15 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
-import { expense as expenseTable, user as userTable, company as companyTable } from '$lib/server/db/schema';
+import {
+	expense as expenseTable,
+	user as userTable,
+	company as companyTable,
+	ocrAccuracyLog as ocrAccuracyLogTable
+} from '$lib/server/db/schema';
 import { uploadReceiptToR2 } from '$lib/server/storage';
 import { formatSastIsoDate } from '$lib/domain/billing';
+import { compareOcrExtraction } from '$lib/domain/ocr-metrics';
 import { eq } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -120,6 +126,43 @@ export const actions: Actions = {
 			isReimbursable,
 			reimbursableCompanyId
 		});
+
+		// If an AI extraction payload was passed, log accuracy metrics (AC-23)
+		if (rawAiExtraction) {
+			try {
+				const extracted = JSON.parse(rawAiExtraction);
+				const comparison = compareOcrExtraction(extracted, {
+					vendorName,
+					amountCents: Math.round(amountCents),
+					transactionDate,
+					categoryId
+				});
+
+				await db.insert(ocrAccuracyLogTable).values({
+					id: crypto.randomUUID(),
+					expenseId,
+					companyId: activeCompanyId,
+					userId: locals.user.id,
+					status: comparison.status,
+					fieldsChangedCount: comparison.fieldsChangedCount,
+					vendorExtracted: extracted.vendorName || null,
+					vendorFinal: vendorName,
+					vendorChanged: comparison.vendorChanged,
+					amountExtractedCents: extracted.amountCents ?? null,
+					amountFinalCents: Math.round(amountCents),
+					amountChanged: comparison.amountChanged,
+					dateExtracted: extracted.transactionDate || null,
+					dateFinal: transactionDate,
+					dateChanged: comparison.dateChanged,
+					categoryExtractedId: extracted.suggestedCategoryId || null,
+					categoryFinalId: categoryId,
+					categoryChanged: comparison.categoryChanged,
+					rawOcrPayload: rawAiExtraction
+				});
+			} catch (logErr) {
+				console.warn('Failed to record OCR accuracy log:', logErr);
+			}
+		}
 
 		throw redirect(303, '/dashboard');
 	}

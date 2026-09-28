@@ -338,3 +338,24 @@ This log is the permanent record of all production releases for the Brickwork pl
   - **Optimized Workers AI Inference:** Configured `max_tokens: 512, temperature: 0.1` and explicit year/dot-matrix digit disambiguation prompting.
   - **Quality Gates:** 100% passing Vitest tests (80 unit & component tests), 100% passing Playwright E2E suites (17 tests), and Svelte type-check (0 errors, 0 warnings).
 
+---
+
+#### Version 1.7.0 — 2026-09-28 (Feature Release: AI Receipt OCR Accuracy Tracking & Audit Metrics)
+- **Deployment Status:** Ready for deployment to Cloudflare Workers (awaiting user authorization)
+- **Target Branch:** `feat/v1.6-card-detection-torch-and-robust-ocr`
+- **Scope & Highlights:**
+  - **AI OCR Accuracy Tracking Engine (AC-23):** Systematically detects and records whether users modify AI-extracted receipt fields prior to saving across the 4 key financial fields: Vendor Name, Amount, Date, and Category.
+  - **Strict Classification Logic:**
+    - `total_fail`: All 4 fields changed by user before persisting.
+    - `partial_fail`: 1 to 3 fields changed by user.
+    - `full_success`: 0 fields changed (all AI-suggested fields kept as-is).
+  - **D1 Schema & Migration (`0003_add_ocr_accuracy_log.sql`):** Created and successfully applied to both local and remote Cloudflare D1 databases (`brickwork-db`). Tracks deltas, field counts, before-and-after values, and raw AI extraction snapshots.
+  - **Capture Flow Integration:** Automatically computes delta comparisons on receipt submission in `/capture` and records log entries into `ocr_accuracy_log`.
+  - **Settings UI Accuracy Dashboard & Audit Table:**
+    - Summary KPI cards in `/settings`: Total Scans Analyzed, Full Match % (green), Partial Fail % (amber), Total Fail % (rose), and individual field accuracy rates (Vendor, Amount, Date, Category).
+    - Status filter pills (`All`, `Success`, `Partial`, `Fail`) for targeted auditing.
+    - Comprehensive Audit Breakdown table with formatted SAST timestamps, status badges, and side-by-side extracted vs final values (with red/amber strike-through on altered fields).
+  - **Zero-Downtime Historical Backfill:** On load, safely backfills existing historical expenses with raw AI extraction data so the metrics table is immediately populated with real historical data.
+  - **Quality Gates:** 100% passing Vitest unit & component tests (86/86 passing), 100% passing Playwright E2E suites (17/17 passing), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers bundle build validated.
+
+

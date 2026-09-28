@@ -7,10 +7,12 @@ import {
 	category as categoryTable,
 	expense as expenseTable,
 	companyMember as companyMemberTable,
-	paymentAccount as paymentAccountTable
+	paymentAccount as paymentAccountTable,
+	ocrAccuracyLog as ocrAccuracyLogTable
 } from '$lib/server/db/schema';
 import { seedBusinessCompany } from '$lib/server/db/seed';
-import { eq, and, asc, desc } from 'drizzle-orm';
+import { eq, and, asc, desc, isNotNull } from 'drizzle-orm';
+import { compareOcrExtraction, calculateOcrSummaryStats } from '$lib/domain/ocr-metrics';
 
 async function checkCanManageCategories(db: ReturnType<typeof getDb>, companyId: string, userId: string): Promise<boolean> {
 	const [comp] = await db
@@ -45,7 +47,21 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 			activeCompany,
 			categories: [],
 			members: [],
-			paymentAccounts: []
+			paymentAccounts: [],
+			ocrLogs: [],
+			ocrStats: {
+				totalScans: 0,
+				fullSuccessCount: 0,
+				fullSuccessRate: 0,
+				partialFailCount: 0,
+				partialFailRate: 0,
+				totalFailCount: 0,
+				totalFailRate: 0,
+				vendorAccuracyRate: 0,
+				amountAccuracyRate: 0,
+				dateAccuracyRate: 0,
+				categoryAccuracyRate: 0
+			}
 		};
 	}
 
@@ -90,13 +106,118 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 		.where(eq(paymentAccountTable.companyId, activeCompany.id))
 		.orderBy(desc(paymentAccountTable.isDefault), asc(paymentAccountTable.createdAt));
 
+	// Backfill historical expenses that have rawAiExtraction if not yet recorded in ocrAccuracyLog
+	try {
+		const existingLogRows = await db
+			.select({ expenseId: ocrAccuracyLogTable.expenseId })
+			.from(ocrAccuracyLogTable)
+			.where(eq(ocrAccuracyLogTable.companyId, activeCompany.id));
+		const existingLogExpenseIds = new Set(existingLogRows.map((r) => r.expenseId).filter(Boolean));
+
+		const unloggedExpenses = await db
+			.select()
+			.from(expenseTable)
+			.where(
+				and(
+					eq(expenseTable.companyId, activeCompany.id),
+					isNotNull(expenseTable.rawAiExtraction)
+				)
+			);
+
+		for (const exp of unloggedExpenses) {
+			if (!exp.rawAiExtraction || existingLogExpenseIds.has(exp.id)) continue;
+			try {
+				const extracted = JSON.parse(exp.rawAiExtraction);
+				const comparison = compareOcrExtraction(extracted, {
+					vendorName: exp.vendorName,
+					amountCents: exp.amountCents,
+					transactionDate: exp.transactionDate,
+					categoryId: exp.categoryId
+				});
+
+				await db.insert(ocrAccuracyLogTable).values({
+					expenseId: exp.id,
+					companyId: exp.companyId,
+					userId: exp.userId,
+					status: comparison.status,
+					fieldsChangedCount: comparison.fieldsChangedCount,
+					vendorExtracted: extracted.vendorName || null,
+					vendorFinal: exp.vendorName,
+					vendorChanged: comparison.vendorChanged,
+					amountExtractedCents: extracted.amountCents ?? null,
+					amountFinalCents: exp.amountCents,
+					amountChanged: comparison.amountChanged,
+					dateExtracted: extracted.transactionDate || null,
+					dateFinal: exp.transactionDate,
+					dateChanged: comparison.dateChanged,
+					categoryExtractedId: extracted.suggestedCategoryId || null,
+					categoryFinalId: exp.categoryId,
+					categoryChanged: comparison.categoryChanged,
+					rawOcrPayload: exp.rawAiExtraction,
+					createdAt: exp.createdAt
+				});
+				existingLogExpenseIds.add(exp.id);
+			} catch (parseErr) {
+				console.warn('Skipping unparseable rawAiExtraction for expense:', exp.id, parseErr);
+			}
+		}
+	} catch (backfillErr) {
+		console.warn('Failed to backfill OCR accuracy log:', backfillErr);
+	}
+
+	// Calculate overall accuracy statistics across all company scans
+	const allCompanyOcrRecords = await db
+		.select({
+			status: ocrAccuracyLogTable.status,
+			vendorChanged: ocrAccuracyLogTable.vendorChanged,
+			amountChanged: ocrAccuracyLogTable.amountChanged,
+			dateChanged: ocrAccuracyLogTable.dateChanged,
+			categoryChanged: ocrAccuracyLogTable.categoryChanged
+		})
+		.from(ocrAccuracyLogTable)
+		.where(eq(ocrAccuracyLogTable.companyId, activeCompany.id));
+
+	const ocrStats = calculateOcrSummaryStats(allCompanyOcrRecords);
+
+	// Load recent 50 scans for the audit breakdown table
+	const ocrLogsRaw = await db
+		.select()
+		.from(ocrAccuracyLogTable)
+		.where(eq(ocrAccuracyLogTable.companyId, activeCompany.id))
+		.orderBy(desc(ocrAccuracyLogTable.createdAt))
+		.limit(50);
+
+	const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+
+	const ocrLogs = ocrLogsRaw.map((log) => {
+		let categoryExtractedName = 'None';
+		if (log.categoryExtractedId) {
+			categoryExtractedName = categoryMap.get(log.categoryExtractedId) || 'Unknown Category';
+		} else if (log.rawOcrPayload) {
+			try {
+				const parsed = JSON.parse(log.rawOcrPayload);
+				if (parsed.suggestedCategory && typeof parsed.suggestedCategory === 'string') {
+					categoryExtractedName = parsed.suggestedCategory;
+				}
+			} catch {}
+		}
+
+		return {
+			...log,
+			categoryExtractedName,
+			categoryFinalName: categoryMap.get(log.categoryFinalId) || 'Unknown Category'
+		};
+	});
+
 	return {
 		user,
 		companies,
 		activeCompany,
 		categories,
 		members,
-		paymentAccounts
+		paymentAccounts,
+		ocrLogs,
+		ocrStats
 	};
 };
 

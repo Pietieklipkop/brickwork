@@ -139,6 +139,24 @@ South African till slips (Pick n Pay, Checkers, Woolworths, Spar, Engen, Total, 
    ```
 6. **Latency Budget**: Total roundtrip target is <2000ms. If the AI model response degrades due to queue latency, a timeout gracefully surfaces the image to the user for manual entry on the review screen.
 
+### 3.3 OCR Accuracy Tracking & Evaluation Architecture (AC-23)
+To ensure continuous visibility into AI extraction quality and model performance across real-world physical receipts:
+1. **Delta Comparison Engine**: When an expense is finalized in the `PreSaveBottomSheet` and saved, the platform compares the initial AI extraction payload against the user's final saved values across four core fields:
+   - `vendorName`
+   - `amountCents`
+   - `transactionDate`
+   - `categoryId`
+2. **Classification Heuristics**:
+   - **Full Match (`full_success`)**: All 4 fields kept as analysed by the AI (0 fields altered).
+   - **Partial Fail (`partial_fail`)**: 1 to 3 fields altered by the user (e.g., corrected vendor spelling or adjusted category).
+   - **Total Fail (`total_fail`)**: All 4 fields altered by the user (complete re-entry).
+3. **Persistence & Auditing**:
+   - Recorded in Cloudflare D1 table `ocr_accuracy_log`, referencing `expense_id`, `company_id`, and `user_id`.
+   - Preserves extracted vs final values, field-by-field change booleans, and changed field counts for longitudinal accuracy trend analysis.
+4. **Settings Analytics Dashboard**:
+   - Rendered in `/settings` featuring KPI stat cards (Overall Accuracy, Partial Rate, Total Fail Rate, and field-by-field accuracy percentages).
+   - A historical audit table detailing recent receipt extractions with side-by-side comparison badges.
+
 ---
 
 ## 4. Cloudflare R2 Storage Architecture

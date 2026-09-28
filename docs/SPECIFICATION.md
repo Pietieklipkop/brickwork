@@ -232,6 +232,7 @@ the volume of receipts processed per month.
 | AC-20 | Multiple Payment Cards | Users can manage multiple payment cards/accounts for both Personal and Business entities in Settings (add, edit, delete, set default). The capture flow automatically pre-selects the default card and lists all cards, and expenses record the card used. |
 | AC-21 | Receipt OCR Preprocessing & Reticle Auto-Crop | Camera snapshots are automatically mapped and cropped to the visible reticle guide to eliminate background noise and boost optical resolution by 3x-4x. A dual-stream client filter pipeline applies grayscale luma weighting, local shadow division, auto-levels contrast stretching, and unsharp edge sharpening before sending the image to Workers AI with dynamic company category injection and SA till slip disambiguation rules, while preserving the natural color photo for R2 storage. |
 | AC-22 | Payment Card Auto-Detection & Car-Capture Ergonomics | Users can optionally specify card digits / card numbers for payment accounts in Settings without obligation. During receipt scanning, the vision engine extracts payment card identifiers and brand, auto-matching and pre-selecting the corresponding payment card in the review sheet. The camera viewfinder incorporates a hardware torch toggle for low-light vehicle cabin environments, long-slip aspect ratio toggling, multi-frame best-shot motion stability selection, and resilient markdown parsing for AI text responses. |
+| AC-23 | AI Extraction Accuracy Tracking & Audit Metrics | The platform tracks user adjustments made to AI-extracted receipt fields (Vendor Name, Amount, Transaction Date, Category). If all 4 fields are altered by the user, the scan is categorized as a "Total Fail"; if 1 to 3 fields are altered, it is categorized as a "Partial Fail"; if 0 fields are altered, it is recorded as a "Full Match". These metrics, along with an audit table showing extracted vs final values and field-by-field accuracy percentages, are accessible under Settings for performance monitoring and model evaluation. |
 
 ---
 
@@ -247,6 +248,7 @@ the volume of receipts processed per month.
 | 1.4     | 20 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-20 (Multiple Payment Cards per Entity for Personal and Business profiles). |
 | 1.5     | 21 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-21 (Receipt OCR Preprocessing, Reticle Auto-Crop, Dual-Stream Storage & AI Prompt Optimization). |
 | 1.6     | 22 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-22 (Payment Card Auto-Detection, Torch Control, Long-Slip Framing & Markdown Extraction Resiliency). |
+| 1.7     | 28 Sep 2026  | Senior DevOps / Arch | Approved | Added AC-23 (AI Extraction Accuracy Tracking, Field-by-Field Delta Audit Table & Settings Analytics). |
 
 ---
 
