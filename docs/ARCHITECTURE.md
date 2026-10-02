@@ -161,18 +161,23 @@ To ensure continuous visibility into AI extraction quality and model performance
 
 ## 4. Cloudflare R2 Storage Architecture
 
-### 4.1 Bucket Layout & Key Structure
-All receipt images are stored privately in `RECEIPTS_BUCKET`:
-```text
-receipts/{company_id}/{year}/{month}/{expense_id}.jpg
-```
+### 4.1 Bucket Layout & Dual-Stream Key Structure (AC-24)
+All receipt images are stored privately in `RECEIPTS_BUCKET` using dual-stream storage:
+- **Original Photo** (`receipt_image_key`): Natural-color cropped receipt photo for legal accounting records:
+  ```text
+  receipts/{company_id}/{year}/{month}/{expense_id}.webp
+  ```
+- **Enhanced OCR Scan** (`ocr_image_key`): Shadow-removed, high-contrast, edge-sharpened image passed to Workers AI:
+  ```text
+  receipts/{company_id}/{year}/{month}/{expense_id}-ocr.jpg
+  ```
 *For personal expenses, `{company_id}` is the user's personal entity ID.*
 
 ### 4.2 Security & Access
 - **Private Bucket**: The R2 bucket has public access disabled.
-- **Serving Mechanism**: An authenticated SvelteKit proxy route `/api/receipts/[id]` verifies that the requesting user belongs to the company before streaming the object via `platform.env.RECEIPTS_BUCKET.get(key)`.
+- **Serving Mechanism**: An authenticated SvelteKit proxy route `/api/receipts/[...key]` verifies that the requesting user owns the company or the associated expense before streaming the object via `platform.env.RECEIPTS_BUCKET.get(key)`.
 - **Cache Headers**: Images are immutable; responses serve `Cache-Control: private, max-age=31536000, immutable`.
-- **Deletion Lifecycle**: When an expense record is deleted, the server deletes the R2 object via `platform.env.RECEIPTS_BUCKET.delete(key)` in the same transaction flow.
+- **Deletion Lifecycle**: When an expense record is deleted, the server deletes both the original (`receiptImageKey`) and filtered OCR (`ocrImageKey`) R2 objects via `platform.env.RECEIPTS_BUCKET.delete(key)` in the same transaction flow.
 
 ---
 

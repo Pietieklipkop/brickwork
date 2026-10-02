@@ -23,6 +23,7 @@
 	let showReview = $state(false);
 	let previewUrl = $state('');
 	let capturedFile: File | null = $state(null);
+	let capturedOcrFile: File | null = $state(null);
 	let saveError = $state('');
 
 	// Drag and drop state
@@ -45,6 +46,7 @@
 
 	async function handleImageCapture(file: File, url: string, ocrFile?: File) {
 		capturedFile = file;
+		capturedOcrFile = ocrFile || null;
 		previewUrl = url;
 		isProcessing = true;
 		saveError = '';
@@ -158,6 +160,7 @@
 
 	function handleManualEntry() {
 		capturedFile = null;
+		capturedOcrFile = null;
 		previewUrl = '';
 		extractedData = {
 			vendorName: '',
@@ -190,6 +193,7 @@
 		if (expense.accountId) form.append('accountId', expense.accountId);
 		if (expense.notes) form.append('notes', expense.notes);
 		if (capturedFile) form.append('image', capturedFile);
+		if (capturedOcrFile) form.append('ocrImage', capturedOcrFile);
 		form.append('rawAiExtraction', JSON.stringify(extractedData));
 		if (expense.isReimbursable) {
 			form.append('isReimbursable', 'true');
@@ -220,6 +224,7 @@
 	function handleCancelReview() {
 		showReview = false;
 		capturedFile = null;
+		capturedOcrFile = null;
 		previewUrl = '';
 	}
 </script>

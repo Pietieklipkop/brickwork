@@ -144,7 +144,8 @@ export const expense = sqliteTable(
 		vendorName: text('vendor_name').notNull(),
 		amountCents: integer('amount_cents').notNull(), // Integer ZAR cents (e.g. 45280 = R 452.80)
 		transactionDate: text('transaction_date').notNull(), // ISO YYYY-MM-DD in SAST
-		receiptImageKey: text('receipt_image_key'), // Cloudflare R2 Object Key
+		receiptImageKey: text('receipt_image_key'), // Cloudflare R2 Object Key (Original photo)
+		ocrImageKey: text('ocr_image_key'), // Cloudflare R2 Object Key (Filtered/Enhanced OCR image)
 		rawAiExtraction: text('raw_ai_extraction'), // JSON snapshot of Workers AI OCR output
 		notes: text('notes'),
 		isReimbursable: integer('is_reimbursable', { mode: 'boolean' }).notNull().default(false),

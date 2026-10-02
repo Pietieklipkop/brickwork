@@ -38,8 +38,18 @@
 	let deletingExpenseId: string | null = $state(null);
 	let isDeleting = $state(false);
 
-	// Receipt preview state
-	let previewImageKey: string | null = $state(null);
+	// Receipt preview state (AC-03, AC-24)
+	let previewExpense: any = $state(null);
+	let previewImageMode = $state<'original' | 'ocr'>('original');
+
+	function openReceiptPreview(exp: any, mode: 'original' | 'ocr' = 'original') {
+		previewExpense = exp;
+		previewImageMode = mode;
+	}
+
+	function closeReceiptPreview() {
+		previewExpense = null;
+	}
 
 	function applyFilters() {
 		const params = new URLSearchParams();
@@ -321,10 +331,10 @@
 					<div class="flex items-start space-x-3.5 min-w-0">
 						<!-- Receipt Thumbnail Trigger -->
 						<div class="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
-							{#if exp.receiptImageKey}
+							{#if exp.receiptImageKey || exp.ocrImageKey}
 								<button
 									type="button"
-									onclick={() => (previewImageKey = exp.receiptImageKey)}
+									onclick={() => openReceiptPreview(exp, exp.receiptImageKey ? 'original' : 'ocr')}
 									title="View receipt slip"
 									aria-label="View receipt slip for {exp.vendorName}"
 									class="text-emerald-600 dark:text-emerald-400 hover:scale-110 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
@@ -348,9 +358,17 @@
 								<p class="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
 									{exp.vendorName}
 								</p>
-								{#if exp.receiptImageKey}
-									<span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+								{#if exp.receiptImageKey && exp.ocrImageKey}
+									<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+										2 Images (Orig + OCR)
+									</span>
+								{:else if exp.receiptImageKey}
+									<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
 										R2 Voucher
+									</span>
+								{:else if exp.ocrImageKey}
+									<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+										OCR Scan
 									</span>
 								{/if}
 								{#if exp.isReimbursable}
@@ -602,40 +620,117 @@
 	</div>
 {/if}
 
-<!-- Receipt Slip Image Viewer Modal -->
-{#if previewImageKey}
+<!-- Receipt Slip Image Viewer Modal (AC-03, AC-24) -->
+{#if previewExpense}
 	<div
 		class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Receipt Image Preview"
 		tabindex="-1"
-		onclick={() => (previewImageKey = null)}
+		onclick={closeReceiptPreview}
 		onkeydown={(e) => {
-			if (e.key === 'Escape') previewImageKey = null;
+			if (e.key === 'Escape') closeReceiptPreview();
 		}}
 	>
 		<div
-			class="relative max-w-lg max-h-[85vh] bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl p-2"
+			class="relative max-w-lg w-full max-h-[90vh] bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
 			onclick={(e) => e.stopPropagation()}
 			role="presentation"
 		>
-			<button
-				type="button"
-				onclick={() => (previewImageKey = null)}
-				class="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-900/70 text-white hover:bg-slate-900 transition-colors"
-				aria-label="Close image preview"
-			>
-				<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<line x1="18" y1="6" x2="6" y2="18"></line>
-					<line x1="6" y1="6" x2="18" y2="18"></line>
-				</svg>
-			</button>
-			<img
-				src={`/api/receipts/${previewImageKey}`}
-				alt="Receipt voucher"
-				class="max-h-[80vh] w-auto object-contain rounded-xl"
-			/>
+			<!-- Top Header: Title, Image Toggle Pills & Close Button -->
+			<div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+				<div class="min-w-0">
+					<h3 class="text-sm font-bold text-slate-900 dark:text-white truncate">
+						{previewExpense.vendorName}
+					</h3>
+					<p class="text-[11px] text-slate-500 font-mono">
+						{centsToZar(previewExpense.amountCents)} &bull; {previewExpense.transactionDate}
+					</p>
+				</div>
+
+				<div class="flex items-center space-x-2 shrink-0">
+					<!-- Toggle Switch if both original and OCR image exist -->
+					{#if previewExpense.receiptImageKey && previewExpense.ocrImageKey}
+						<div class="flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">
+							<button
+								type="button"
+								onclick={() => (previewImageMode = 'original')}
+								class="px-2.5 py-1 rounded-md transition-colors {previewImageMode === 'original'
+									? 'bg-white dark:bg-slate-900 text-[#0B2240] dark:text-white shadow-xs'
+									: 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}"
+							>
+								Original
+							</button>
+							<button
+								type="button"
+								onclick={() => (previewImageMode = 'ocr')}
+								class="px-2.5 py-1 rounded-md transition-colors {previewImageMode === 'ocr'
+									? 'bg-emerald-500 text-white shadow-xs'
+									: 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}"
+							>
+								Filtered OCR
+							</button>
+						</div>
+					{:else if previewExpense.ocrImageKey}
+						<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+							Filtered OCR
+						</span>
+					{:else}
+						<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+							Original Photo
+						</span>
+					{/if}
+
+					<button
+						type="button"
+						onclick={closeReceiptPreview}
+						class="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+						aria-label="Close image preview"
+					>
+						<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+			</div>
+
+			<!-- Image Display -->
+			<div class="p-3 overflow-auto flex items-center justify-center bg-slate-950/5 dark:bg-slate-950/40">
+				{#if previewImageMode === 'ocr' && previewExpense.ocrImageKey}
+					<img
+						src={`/api/receipts/${previewExpense.ocrImageKey}`}
+						alt="Preprocessed high-contrast OCR scan for {previewExpense.vendorName}"
+						class="max-h-[70vh] w-auto object-contain rounded-xl shadow-sm border border-slate-200 dark:border-slate-800"
+					/>
+				{:else if previewExpense.receiptImageKey}
+					<img
+						src={`/api/receipts/${previewExpense.receiptImageKey}`}
+						alt="Original receipt voucher for {previewExpense.vendorName}"
+						class="max-h-[70vh] w-auto object-contain rounded-xl shadow-sm border border-slate-200 dark:border-slate-800"
+					/>
+				{:else}
+					<div class="py-16 text-center text-xs text-slate-400">
+						No image available.
+					</div>
+				{/if}
+			</div>
+
+			<!-- Footer Note -->
+			<div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
+				<span>
+					{previewImageMode === 'ocr' ? 'High-contrast shadow-filtered scan used for AI extraction' : 'Original photo stored for legal accounting records'}
+				</span>
+				<a
+					href={`/api/receipts/${previewImageMode === 'ocr' && previewExpense.ocrImageKey ? previewExpense.ocrImageKey : previewExpense.receiptImageKey}`}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+				>
+					Open Full Resolution &nearr;
+				</a>
+			</div>
 		</div>
 	</div>
 {/if}

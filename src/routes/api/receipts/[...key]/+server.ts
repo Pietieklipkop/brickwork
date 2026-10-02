@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import { getDb, company, expense } from '$lib/server/db';
 
 export const GET: RequestHandler = async ({ params, locals, platform }) => {
@@ -29,9 +29,12 @@ export const GET: RequestHandler = async ({ params, locals, platform }) => {
 		});
 
 		if (!userCompany) {
-			// Also check if user owns the expense associated with this receipt key
+			// Also check if user owns the expense associated with this receipt key (original or OCR variant)
 			const userExpense = await db.query.expense.findFirst({
-				where: and(eq(expense.receiptImageKey, key), eq(expense.userId, locals.user.id))
+				where: and(
+					or(eq(expense.receiptImageKey, key), eq(expense.ocrImageKey, key)),
+					eq(expense.userId, locals.user.id)
+				)
 			});
 
 			if (!userExpense) {

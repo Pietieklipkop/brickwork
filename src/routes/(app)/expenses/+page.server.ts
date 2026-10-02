@@ -79,6 +79,7 @@ export const load: PageServerLoad = async ({ parent, url, platform }) => {
 			amountCents: expenseTable.amountCents,
 			transactionDate: expenseTable.transactionDate,
 			receiptImageKey: expenseTable.receiptImageKey,
+			ocrImageKey: expenseTable.ocrImageKey,
 			notes: expenseTable.notes,
 			categoryId: expenseTable.categoryId,
 			categoryName: categoryTable.name,
@@ -199,9 +200,12 @@ export const actions: Actions = {
 			return fail(403, { error: 'Unauthorized to delete this expense.' });
 		}
 
-		// Atomically delete receipt voucher from R2 (AC-04)
+		// Atomically delete receipt vouchers from R2 (AC-04, AC-24)
 		if (existingExpense.receiptImageKey && platform?.env?.RECEIPTS_BUCKET) {
 			await deleteReceiptFromR2(platform.env.RECEIPTS_BUCKET, existingExpense.receiptImageKey);
+		}
+		if (existingExpense.ocrImageKey && platform?.env?.RECEIPTS_BUCKET) {
+			await deleteReceiptFromR2(platform.env.RECEIPTS_BUCKET, existingExpense.ocrImageKey);
 		}
 
 		// Delete record from Cloudflare D1

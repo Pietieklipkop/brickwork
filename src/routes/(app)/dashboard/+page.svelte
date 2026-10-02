@@ -310,9 +310,9 @@
 						<div class="flex items-center space-x-3 min-w-0">
 							<!-- Receipt Thumbnail / Icon Indicator (AC-08) -->
 							<div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
-								{#if exp.receiptImageKey}
+								{#if exp.receiptImageKey || exp.ocrImageKey}
 									<a
-										href={`/api/receipts/${exp.receiptImageKey}`}
+										href={`/api/receipts/${exp.receiptImageKey || exp.ocrImageKey}`}
 										target="_blank"
 										rel="noopener noreferrer"
 										title="View full receipt image"
@@ -338,8 +338,12 @@
 									<p class="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
 										{exp.vendorName}
 									</p>
-									{#if exp.receiptImageKey}
-										<span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+									{#if exp.receiptImageKey && exp.ocrImageKey}
+										<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+											2 Images
+										</span>
+									{:else if exp.receiptImageKey || exp.ocrImageKey}
+										<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
 											Receipt
 										</span>
 									{/if}

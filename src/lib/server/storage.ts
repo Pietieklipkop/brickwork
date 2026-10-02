@@ -10,25 +10,28 @@ export interface UploadReceiptParams {
 	expenseId: string;
 	imageBytes: ArrayBuffer | Uint8Array;
 	mimeType?: string;
+	variant?: 'original' | 'ocr';
 }
 
 /**
  * Uploads a receipt image to the private R2 bucket following standard hierarchical layout:
- * receipts/{company_id}/{year}/{month}/{expense_id}.webp
+ * receipts/{company_id}/{year}/{month}/{expense_id}.webp (or -ocr.jpg)
  */
 export async function uploadReceiptToR2({
 	r2Bucket,
 	companyId,
 	expenseId,
 	imageBytes,
-	mimeType = 'image/webp'
+	mimeType = 'image/webp',
+	variant = 'original'
 }: UploadReceiptParams): Promise<string> {
 	const now = new Date();
 	const year = now.getUTCFullYear();
 	const month = String(now.getUTCMonth() + 1).padStart(2, '0');
 
 	const extension = mimeType.includes('png') ? 'png' : mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'jpg' : 'webp';
-	const key = `receipts/${companyId}/${year}/${month}/${expenseId}.${extension}`;
+	const suffix = variant === 'ocr' ? '-ocr' : '';
+	const key = `receipts/${companyId}/${year}/${month}/${expenseId}${suffix}.${extension}`;
 
 	await r2Bucket.put(key, imageBytes, {
 		httpMetadata: {

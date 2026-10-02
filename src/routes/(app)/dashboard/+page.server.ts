@@ -90,6 +90,7 @@ export const load: PageServerLoad = async ({ parent, platform, url }) => {
 			amountCents: expenseTable.amountCents,
 			transactionDate: expenseTable.transactionDate,
 			receiptImageKey: expenseTable.receiptImageKey,
+			ocrImageKey: expenseTable.ocrImageKey,
 			notes: expenseTable.notes,
 			categoryId: expenseTable.categoryId,
 			categoryName: categoryTable.name,

@@ -358,4 +358,23 @@ This log is the permanent record of all production releases for the Brickwork pl
   - **Zero-Downtime Historical Backfill:** On load, safely backfills existing historical expenses with raw AI extraction data so the metrics table is immediately populated with real historical data.
   - **Quality Gates:** 100% passing Vitest unit & component tests (86/86 passing), 100% passing Playwright E2E suites (17/17 passing), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers bundle build validated.
 
+---
+
+#### Version 1.8.0 — 2026-10-02 (Feature Release: Dual-Stream Receipt Image Storage: Original & Enhanced OCR Scans)
+- **Deployment Status:** Ready for deployment to Cloudflare Workers (awaiting user authorization)
+- **Target Branch:** `feat/v1.8-save-filtered-ocr-receipt-image`
+- **Scope & Highlights:**
+  - **Dual-Stream Receipt Storage (AC-24):** Upon receipt capture or file upload, both the natural-color cropped receipt photo and the preprocessed, shadow-removed, high-contrast OCR image are saved to Cloudflare R2 (`RECEIPTS_BUCKET`).
+  - **D1 Schema & Migration (`0004_add_ocr_image_key_to_expense.sql`):** Added `ocr_image_key` column to `expense` table and applied migration to both local and remote Cloudflare D1 databases.
+  - **Storage Architecture & Key Conventions:**
+    - Original photo: `receipts/{companyId}/{year}/{month}/{expenseId}.webp` (stored in `receipt_image_key`)
+    - Enhanced OCR scan: `receipts/{companyId}/{year}/{month}/{expenseId}-ocr.jpg` (stored in `ocr_image_key`)
+  - **Atomic Deletion:** Deleting an expense automatically removes both the original and filtered OCR images from R2 storage.
+  - **Expenses Ledger & Interactive Image Viewer:**
+    - Receipt thumbnail badges in `/expenses` indicate when both images are stored (`2 Images (Orig + OCR)`).
+    - Image preview modal features a segmented pill toggle switch (`[ Original ]` vs `[ Filtered OCR ]`), allowing users to visually inspect and contrast the original photo against the preprocessed OCR scan sent to Workers AI.
+    - Direct full-resolution links allow opening either image variant in a new tab.
+  - **Quality Gates:** 100% passing Vitest unit & component tests (86/86 passing across 11 test suites), 100% passing Playwright E2E suites (17/17 passing), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers build verified.
+
+
 

@@ -38,6 +38,7 @@ export const actions: Actions = {
 		const notes = String(formData.get('notes') || '').trim() || null;
 		const rawAiExtraction = String(formData.get('rawAiExtraction') || '').trim() || null;
 		const imageFile = formData.get('image') as File | null;
+		const ocrImageFile = formData.get('ocrImage') as File | null;
 		const isReimbursableRaw = formData.get('isReimbursable');
 		const isReimbursable = isReimbursableRaw === 'true' || isReimbursableRaw === 'on';
 		const reimbursableCompanyId = isReimbursable
@@ -87,8 +88,9 @@ export const actions: Actions = {
 
 		const expenseId = crypto.randomUUID();
 		let receiptImageKey: string | null = null;
+		let ocrImageKey: string | null = null;
 
-		// Upload receipt image to Cloudflare R2 if present (AC-01, AC-03)
+		// Upload receipt image to Cloudflare R2 if present (AC-01, AC-03, AC-24)
 		if (imageFile && imageFile.size > 0) {
 			if (imageFile.size > 10 * 1024 * 1024) {
 				return fail(400, { error: 'Receipt image exceeds 10MB limit.' });
@@ -102,10 +104,30 @@ export const actions: Actions = {
 						companyId: activeCompanyId,
 						expenseId,
 						imageBytes: arrayBuffer,
-						mimeType: imageFile.type || 'image/webp'
+						mimeType: imageFile.type || 'image/webp',
+						variant: 'original'
 					});
 				} catch (err) {
 					console.error('Failed to upload receipt to R2:', err);
+				}
+			}
+		}
+
+		// Upload preprocessed/filtered OCR image to Cloudflare R2 if present (AC-24)
+		if (ocrImageFile && ocrImageFile.size > 0) {
+			if (platform?.env?.RECEIPTS_BUCKET) {
+				try {
+					const ocrArrayBuffer = await ocrImageFile.arrayBuffer();
+					ocrImageKey = await uploadReceiptToR2({
+						r2Bucket: platform.env.RECEIPTS_BUCKET,
+						companyId: activeCompanyId,
+						expenseId,
+						imageBytes: ocrArrayBuffer,
+						mimeType: ocrImageFile.type || 'image/jpeg',
+						variant: 'ocr'
+					});
+				} catch (err) {
+					console.error('Failed to upload filtered OCR receipt image to R2:', err);
 				}
 			}
 		}
@@ -121,6 +143,7 @@ export const actions: Actions = {
 			amountCents: Math.round(amountCents),
 			transactionDate,
 			receiptImageKey,
+			ocrImageKey,
 			rawAiExtraction,
 			notes,
 			isReimbursable,

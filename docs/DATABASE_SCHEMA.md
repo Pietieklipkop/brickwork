@@ -82,6 +82,7 @@ erDiagram
         integer amount_cents
         text transaction_date
         text receipt_image_key
+        text ocr_image_key
         text raw_ai_extraction
         integer created_at
         integer updated_at
@@ -215,7 +216,8 @@ export const expenses = sqliteTable('expenses', {
   vendorName: text('vendor_name').notNull(),
   amountCents: integer('amount_cents').notNull(), // ZAR cents (e.g. 15000 = R 150.00)
   transactionDate: text('transaction_date').notNull(), // ISO YYYY-MM-DD (SAST)
-  receiptImageKey: text('receipt_image_key').notNull(), // R2 Object Key
+  receiptImageKey: text('receipt_image_key').notNull(), // R2 Object Key (Original Photo)
+  ocrImageKey: text('ocr_image_key'), // R2 Object Key (Enhanced OCR Scan)
   rawAiExtraction: text('raw_ai_extraction'), // JSON string snapshot of AI parsing
   isReimbursable: integer('is_reimbursable', { mode: 'boolean' }).notNull().default(false),
   reimbursableCompanyId: text('reimbursable_company_id').references(() => companies.id, { onDelete: 'set null' }),
