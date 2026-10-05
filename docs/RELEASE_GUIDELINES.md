@@ -371,9 +371,9 @@ This log is the permanent record of all production releases for the Brickwork pl
     - Enhanced OCR scan: `receipts/{companyId}/{year}/{month}/{expenseId}-ocr.jpg` (stored in `ocr_image_key`)
   - **Atomic Deletion:** Deleting an expense automatically removes both the original and filtered OCR images from R2 storage.
   - **Expenses Ledger & Interactive Image Viewer:**
-    - Receipt thumbnail badges in `/expenses` indicate when both images are stored (`2 Images (Orig + OCR)`).
-    - Image preview modal features a segmented pill toggle switch (`[ Original ]` vs `[ Filtered OCR ]`), allowing users to visually inspect and contrast the original photo against the preprocessed OCR scan sent to Workers AI.
-    - Direct full-resolution links allow opening either image variant in a new tab.
+    - Dedicated interactive pill buttons in `/expenses` (`[ Original ]` and `[ OCR Scan ]`) and an eye preview button allow users to immediately view either image variant or open side-by-side.
+    - Enhanced image preview modal features a 3-way toggle (`[ Original ]`, `[ Filtered OCR ]`, `[ Side-by-Side ]`).
+    - Side-by-side comparison view renders a dual-column layout with synchronized preview and full-resolution links, letting users directly contrast the original photo against the preprocessed OCR scan sent to Workers AI.
   - **Quality Gates:** 100% passing Vitest unit & component tests (86/86 passing across 11 test suites), 100% passing Playwright E2E suites (17/17 passing), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers build verified.
 
 
