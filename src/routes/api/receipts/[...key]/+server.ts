@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { eq, and, or } from 'drizzle-orm';
-import { getDb, company, expense } from '$lib/server/db';
+import { getDb, company, expense, companyMember } from '$lib/server/db';
 
 export const GET: RequestHandler = async ({ params, locals, platform }) => {
 	if (!locals.user) {
@@ -29,16 +29,23 @@ export const GET: RequestHandler = async ({ params, locals, platform }) => {
 		});
 
 		if (!userCompany) {
-			// Also check if user owns the expense associated with this receipt key (original or OCR variant)
-			const userExpense = await db.query.expense.findFirst({
-				where: and(
-					or(eq(expense.receiptImageKey, key), eq(expense.ocrImageKey, key)),
-					eq(expense.userId, locals.user.id)
-				)
+			// Check if user is a registered member of this company
+			const memberRecord = await db.query.companyMember.findFirst({
+				where: and(eq(companyMember.companyId, companyId), eq(companyMember.userId, locals.user.id))
 			});
 
-			if (!userExpense) {
-				throw error(403, 'Forbidden: You do not have access to this receipt.');
+			if (!memberRecord) {
+				// Also check if user owns the expense associated with this receipt key (original or OCR variant)
+				const userExpense = await db.query.expense.findFirst({
+					where: and(
+						or(eq(expense.receiptImageKey, key), eq(expense.ocrImageKey, key)),
+						eq(expense.userId, locals.user.id)
+					)
+				});
+
+				if (!userExpense) {
+					throw error(403, 'Forbidden: You do not have access to this receipt.');
+				}
 			}
 		}
 	}
