@@ -360,9 +360,10 @@ This log is the permanent record of all production releases for the Brickwork pl
 
 ---
 
-#### Version 1.8.0 — 2026-10-02 (Feature Release: Dual-Stream Receipt Image Storage: Original & Enhanced OCR Scans)
-- **Deployment Status:** Ready for deployment to Cloudflare Workers (awaiting user authorization)
-- **Target Branch:** `feat/v1.8-save-filtered-ocr-receipt-image`
+#### Version 1.8.0 — 2026-10-05 (Feature Release: Dual-Stream Receipt Image Storage: Original & Enhanced OCR Scans)
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `49c24172-d87b-4012-9d51-49f6f9fe44b2`)
+- **Target Branch:** `feat/v1.8-save-filtered-ocr-receipt-image` (Commit: `b02141d`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
   - **Dual-Stream Receipt Storage (AC-24):** Upon receipt capture or file upload, both the natural-color cropped receipt photo and the preprocessed, shadow-removed, high-contrast OCR image are saved to Cloudflare R2 (`RECEIPTS_BUCKET`).
   - **D1 Schema & Migration (`0004_add_ocr_image_key_to_expense.sql`):** Added `ocr_image_key` column to `expense` table and applied migration to both local and remote Cloudflare D1 databases.
