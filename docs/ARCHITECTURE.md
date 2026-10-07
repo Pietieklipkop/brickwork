@@ -109,7 +109,10 @@ South African till slips (Pick n Pay, Checkers, Woolworths, Spar, Engen, Total, 
 - Currency markers as `R`, `ZAR`, or bare numbers
 
 **Extraction Pipeline**:
-1. **Client Reticle Auto-Crop & Dynamic Framing**: Viewfinder camera frames are mapped and cropped directly to the user-visible alignment reticle (taking CSS `object-cover` scaling into account) with support for Standard (3:4) and Long Slip (1:2.5) aspect modes. This eliminates extraneous background clutter and delivers a 3x-4x effective optical resolution multiplier on receipt text without optical zoom.
+1. **Real-Time Document Detection & 4-Point Homography Perspective Dewarping (AC-25)**:
+   - *Live Viewfinder Detection*: Camera frames are downscaled onto an offscreen canvas running real-time edge and quadrilateral contour detection, smoothing the 4 paper corners across frames and projecting an animated SVG boundary overlay directly over the physical receipt.
+   - *Stability Auto-Capture*: When detected corner drift drops below the motion threshold for >500ms and Laplacian sharpness confirms no motion blur, the shutter fires automatically.
+   - *Projective Homography Dewarping*: The 4 detected corners $(P_1, P_2, P_3, P_4)$ are transformed via a 3x3 projective homography matrix (Heckbert inverse quadrilateral mapping with bilinear interpolation), geometrically straightening tilted/angled till slips into flat, upright top-down rectangular scans before filter enhancement and storage. If no clear quadrilateral boundary is identified, it seamlessly falls back to the reticle guide crop.
 2. **Car-Capture Ergonomics & Hardware Controls**:
    - *Hardware Torch / Flashlight*: MediaTrackCapabilities torch constraint toggling for low-light vehicle cabin environments.
    - *Multi-Frame Best-Shot Selection*: Rapid 3-frame burst evaluating Laplacian edge variance to automatically pick the sharpest frame and discard motion blur.

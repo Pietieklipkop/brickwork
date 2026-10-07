@@ -10,6 +10,9 @@
  * Designed with pure pixel mathematics so algorithms are 100% testable in Node and Vitest.
  */
 
+import { dewarpQuadCanvas, isConvexQuad, type Quad, type Point, detectReceiptQuad, orderQuadPoints, smoothQuad, quadMovement } from './document-scanner';
+export { dewarpQuadCanvas, isConvexQuad, type Quad, type Point, detectReceiptQuad, orderQuadPoints, smoothQuad, quadMovement };
+
 export interface CropRect {
 	sx: number;
 	sy: number;
@@ -510,10 +513,26 @@ export function cropVideoToReticle(
  */
 export async function processReceiptSnapshot(
 	video: HTMLVideoElement,
-	containerEl: HTMLElement,
-	reticleEl: HTMLElement
+	containerEl?: HTMLElement | null,
+	reticleEl?: HTMLElement | null,
+	detectedQuad?: Quad | null
 ): Promise<{ originalFile: File; ocrFile: File; previewUrl: string }> {
-	const croppedCanvas = cropVideoToReticle(video, containerEl, reticleEl, 1600);
+	let croppedCanvas: HTMLCanvasElement;
+
+	if (detectedQuad && isConvexQuad(detectedQuad)) {
+		croppedCanvas = dewarpQuadCanvas(video, detectedQuad, true, 1600);
+	} else if (containerEl && reticleEl) {
+		croppedCanvas = cropVideoToReticle(video, containerEl, reticleEl, 1600);
+	} else {
+		croppedCanvas = document.createElement('canvas');
+		const w = video.videoWidth || 1280;
+		const h = video.videoHeight || 720;
+		croppedCanvas.width = w;
+		croppedCanvas.height = h;
+		const ctx = croppedCanvas.getContext('2d');
+		if (ctx) ctx.drawImage(video, 0, 0, w, h);
+	}
+
 	const enhancedCanvas = applyOcrFiltersToCanvas(croppedCanvas);
 
 	const timestamp = Date.now();

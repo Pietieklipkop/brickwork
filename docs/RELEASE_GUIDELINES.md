@@ -377,5 +377,18 @@ This log is the permanent record of all production releases for the Brickwork pl
     - Side-by-side comparison view renders a dual-column layout with synchronized preview and full-resolution links, letting users directly contrast the original photo against the preprocessed OCR scan sent to Workers AI.
   - **Quality Gates:** 100% passing Vitest unit & component tests (86/86 passing across 11 test suites), 100% passing Playwright E2E suites (17/17 passing), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers build verified.
 
+---
+
+#### Version 1.9.0 — 2026-10-07 (Feature Release: Real-Time Document Detection, 4-Point Homography Perspective Dewarping & Auto-Capture)
+- **Deployment Status:** In Development
+- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp`
+- **Scope & Highlights:**
+  - **Real-Time Quadrilateral Document Detection (AC-25):** Viewfinder runs a lightweight, frame-throttled edge and contour detector on downscaled video frames, computing paper boundaries via Otsu binarization and convex polygon approximation.
+  - **Dynamic Viewfinder Boundary Overlay:** Renders an animated SVG quadrilateral boundary overlay with glowing corner nodes that tracks the physical receipt in the camera feed.
+  - **Projective Homography Perspective Dewarping:** 4-point projective homography transform (Heckbert inverse quad mapping with bilinear interpolation) unwarps trapezoidal/angled receipt captures into flat, top-down rectangular scans before filter enhancement and storage.
+  - **Stability Auto-Capture & Manual Override:** Auto-snaps receipt photo when the 4 corners remain stationary and motion blur is low, with manual shutter button and corner fallback.
+  - **Interactive Corner Fine-Tuning UI:** Allows users to adjust the 4 corner points with touch-friendly magnifying loupes if manual crop refinement is desired.
+
+
 
 
