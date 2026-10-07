@@ -380,8 +380,9 @@ This log is the permanent record of all production releases for the Brickwork pl
 ---
 
 #### Version 1.9.0 — 2026-10-07 (Feature Release: Real-Time Document Detection, 4-Point Homography Perspective Dewarping & Auto-Capture)
-- **Deployment Status:** In Development
-- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp`
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `9df2bd7e-13b0-4b5d-b9a8-0802f2683d3f`)
+- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp` (Commit: `e7e57c3`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
   - **Real-Time Quadrilateral Document Detection (AC-25):** Viewfinder runs a lightweight, frame-throttled edge and contour detector on downscaled video frames, computing paper boundaries via Otsu binarization and convex polygon approximation.
   - **Dynamic Viewfinder Boundary Overlay:** Renders an animated SVG quadrilateral boundary overlay with glowing corner nodes that tracks the physical receipt in the camera feed.
