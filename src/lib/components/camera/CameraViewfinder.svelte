@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import {
 		processReceiptSnapshot,
 		processUploadedImageFile,
@@ -26,6 +26,7 @@
 	let fileInputEl: HTMLInputElement | null = $state(null);
 	let stream: MediaStream | null = $state(null);
 	let cameraActive = $state(false);
+	let cameraStarting = $state(true);
 	let cameraError = $state('');
 	let hasTorch = $state(false);
 	let isTorchOn = $state(false);
@@ -55,21 +56,46 @@
 
 	async function startCamera() {
 		cameraError = '';
+		cameraStarting = true;
 		try {
-			if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-				stream = await navigator.mediaDevices.getUserMedia({
-					video: {
-						facingMode: { ideal: 'environment' },
-						width: { ideal: 1920 },
-						height: { ideal: 1080 }
-					},
-					audio: false
-				});
+			if (!videoEl) {
+				await tick();
+			}
 
-				if (videoEl) {
+			if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+				try {
+					stream = await navigator.mediaDevices.getUserMedia({
+						video: {
+							facingMode: { ideal: 'environment' },
+							width: { ideal: 1920 },
+							height: { ideal: 1080 }
+						},
+						audio: false
+					});
+				} catch (resErr) {
+					console.warn('1080p getUserMedia failed, retrying standard resolution:', resErr);
+					stream = await navigator.mediaDevices.getUserMedia({
+						video: { facingMode: { ideal: 'environment' } },
+						audio: false
+					});
+				}
+
+				if (videoEl && stream) {
 					videoEl.srcObject = stream;
-					await videoEl.play();
+					videoEl.muted = true;
+					videoEl.defaultMuted = true;
+					videoEl.playsInline = true;
+					videoEl.setAttribute('playsinline', 'true');
+					videoEl.setAttribute('muted', 'true');
+
+					try {
+						await videoEl.play();
+					} catch (playErr) {
+						console.warn('Initial videoEl.play() warning:', playErr);
+					}
+
 					cameraActive = true;
+					cameraStarting = false;
 
 					const track = stream.getVideoTracks()[0];
 					if (track) {
@@ -78,13 +104,20 @@
 					}
 
 					startDetectionLoop();
+				} else {
+					cameraActive = false;
+					cameraStarting = false;
+					cameraError = 'Video element could not be initialized.';
 				}
 			} else {
 				cameraActive = false;
+				cameraStarting = false;
+				cameraError = 'Camera not supported in this browser.';
 			}
 		} catch (err: any) {
 			console.warn('Camera access error or permission denied:', err);
 			cameraActive = false;
+			cameraStarting = false;
 			cameraError = 'Camera access unavailable. You can upload an image instead.';
 		}
 	}
@@ -203,7 +236,11 @@
 			stream.getTracks().forEach((track) => track.stop());
 			stream = null;
 		}
+		if (videoEl) {
+			videoEl.srcObject = null;
+		}
 		cameraActive = false;
+		cameraStarting = false;
 		isTorchOn = false;
 	}
 
@@ -354,16 +391,17 @@
 		<div class="absolute inset-0 bg-white/70 z-40 pointer-events-none transition-opacity duration-150"></div>
 	{/if}
 
+	<!-- Live Video Stream: Always rendered in DOM so videoEl is bound immediately on mount -->
+	<!-- svelte-ignore a11y_media_has_caption -->
+	<video
+		bind:this={videoEl}
+		autoplay
+		playsinline
+		muted
+		class="w-full h-full object-cover {cameraActive ? 'block' : 'hidden'}"
+	></video>
+
 	{#if cameraActive}
-		<!-- Live Video Stream -->
-		<!-- svelte-ignore a11y_media_has_caption -->
-		<video
-			bind:this={videoEl}
-			autoplay
-			playsinline
-			muted
-			class="w-full h-full object-cover"
-		></video>
 
 		<!-- Top Controls Bar: Aspect Ratio, Version Tag, Auto-Snap & Torch -->
 		<div class="absolute top-4 left-0 right-0 z-20 flex items-center justify-between px-3 sm:px-5 pointer-events-auto gap-2">
@@ -530,9 +568,16 @@
 			<!-- Placeholder for spacing -->
 			<div class="w-12"></div>
 		</div>
+	{:else if cameraStarting}
+		<!-- Camera Initializing Spinner -->
+		<div class="p-8 text-center text-white max-w-sm flex flex-col items-center z-10">
+			<span class="loading loading-spinner text-emerald-400 loading-lg mb-4"></span>
+			<h3 class="text-base font-bold mb-1">Starting Camera...</h3>
+			<p class="text-xs text-slate-400">Please grant camera permissions if prompted</p>
+		</div>
 	{:else}
 		<!-- Fallback Viewfinder if Camera Permission Denied or Unavailable -->
-		<div class="p-8 text-center text-white max-w-sm flex flex-col items-center">
+		<div class="p-8 text-center text-white max-w-sm flex flex-col items-center z-10">
 			<div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
 				<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path>
@@ -545,19 +590,28 @@
 				{cameraError || 'Use your device camera or select a receipt photo to scan.'}
 			</p>
 
-			<button
-				type="button"
-				onclick={() => fileInputEl?.click()}
-				disabled={isProcessing}
-				class="btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 px-6 border-none shadow-lg w-full"
-			>
-				{#if isProcessing}
-					<span class="loading loading-spinner loading-sm"></span>
-					<span>Scanning receipt...</span>
-				{:else}
-					<span>Choose Photo / File</span>
-				{/if}
-			</button>
+			<div class="flex flex-col gap-2.5 w-full">
+				<button
+					type="button"
+					onclick={startCamera}
+					class="btn bg-slate-800 hover:bg-slate-700 text-white font-semibold h-11 px-6 border border-slate-700 shadow-md w-full"
+				>
+					Retry Camera
+				</button>
+				<button
+					type="button"
+					onclick={() => fileInputEl?.click()}
+					disabled={isProcessing}
+					class="btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-12 px-6 border-none shadow-lg w-full"
+				>
+					{#if isProcessing}
+						<span class="loading loading-spinner loading-sm"></span>
+						<span>Scanning receipt...</span>
+					{:else}
+						<span>Choose Photo / File</span>
+					{/if}
+				</button>
+			</div>
 		</div>
 	{/if}
 
