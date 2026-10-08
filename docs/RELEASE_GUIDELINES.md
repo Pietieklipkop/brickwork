@@ -393,8 +393,9 @@ This log is the permanent record of all production releases for the Brickwork pl
 ---
 
 #### Version 1.9.1 — 2026-10-08 (Enhancement Release: Resilient Hull Detection, Sweeping Laser HUD, PWA Auto-Reload)
-- **Deployment Status:** Ready for deployment to Cloudflare Workers (awaiting user authorization)
-- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp`
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `a29461f9-afec-422a-a8eb-c27966a176ca`)
+- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp` (Commit: `61799e1`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
   - **PWA Stale Cache Auto-Update (`controllerchange`):** Automatically reloads the application when a new Service Worker takes over an existing installation (`hadPreviousController`), ensuring mobile users immediately receive newly deployed scanner code without manual cache clearing. Guarded against initial installation and automated test runners (`navigator.webdriver`).
   - **Combinatorial Convex Hull Maximal-Area Quad Detection (`findMaxAreaQuadFromHull`):** Replaces rigid RDP 4-vertex polygon approximation with combinatorial maximal-area quad selection from convex hull points, reliably detecting crumpled, folded, or curved retail receipts even when fingers or edges break simple polygon approximations.
