@@ -393,10 +393,11 @@ This log is the permanent record of all production releases for the Brickwork pl
 ---
 
 #### Version 1.9.1 — 2026-10-08 (Enhancement Release: Resilient Hull Detection, Sweeping Laser HUD, PWA Auto-Reload)
-- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `a29461f9-afec-422a-a8eb-c27966a176ca`)
-- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp` (Commit: `61799e1`)
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `0fd43d66-42f3-4d3e-bec8-a98470b9145e`)
+- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp` (Commit: `c8319fe`)
 - **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
+  - **Camera DOM Binding Lifecycle Fix:** Removed conditional `{#if cameraActive}` wrapping around the `<video>` element, ensuring `bind:this={videoEl}` is bound immediately upon component mount rather than being unmounted, resolving the mobile "Camera Unavailable" fallback when camera hardware stream was already active. Added starting spinner state and "Retry Camera" button.
   - **PWA Stale Cache Auto-Update (`controllerchange`):** Automatically reloads the application when a new Service Worker takes over an existing installation (`hadPreviousController`), ensuring mobile users immediately receive newly deployed scanner code without manual cache clearing. Guarded against initial installation and automated test runners (`navigator.webdriver`).
   - **Combinatorial Convex Hull Maximal-Area Quad Detection (`findMaxAreaQuadFromHull`):** Replaces rigid RDP 4-vertex polygon approximation with combinatorial maximal-area quad selection from convex hull points, reliably detecting crumpled, folded, or curved retail receipts even when fingers or edges break simple polygon approximations.
   - **Multi-Threshold Adaptive Binarization:** Multi-pass Otsu threshold search (`[otsu, otsu - 20, otsu + 20]`) allowing document detection across dim car cabins, shadows, and reflective glare.
