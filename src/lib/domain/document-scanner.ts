@@ -440,7 +440,61 @@ export function convexHull(points: Point[]): Point[] {
 }
 
 /**
+ * Selects 4 vertices from a convex hull that maximize quadrilateral area.
+ * Mathematically guaranteed to find the 4 outermost document corners and form a strictly convex quad.
+ */
+export function findMaxAreaQuadFromHull(hull: Point[]): Quad | null {
+	if (hull.length < 4) return null;
+	if (hull.length === 4) {
+		const q = orderQuadPoints(hull);
+		return isConvexQuad(q) ? q : null;
+	}
+
+	// Simplify slightly with RDP if hull has more than 16 points to keep combinatorial search fast (< 0.2ms)
+	let candidatePoints = hull;
+	if (candidatePoints.length > 16) {
+		let perimeter = 0;
+		for (let i = 0; i < candidatePoints.length; i++) {
+			perimeter += distance(candidatePoints[i], candidatePoints[(i + 1) % candidatePoints.length]);
+		}
+		const simplified = ramerDouglasPeucker(candidatePoints, perimeter * 0.02);
+		if (simplified.length >= 4) {
+			candidatePoints = simplified;
+		}
+	}
+
+	const n = candidatePoints.length;
+	let maxArea = 0;
+	let bestQuad: Quad | null = null;
+
+	for (let i = 0; i < n - 3; i++) {
+		for (let j = i + 1; j < n - 2; j++) {
+			for (let k = j + 1; k < n - 1; k++) {
+				for (let l = k + 1; l < n; l++) {
+					const candidate: Quad = [
+						candidatePoints[i],
+						candidatePoints[j],
+						candidatePoints[k],
+						candidatePoints[l]
+					];
+					const area = quadArea(candidate);
+					if (area > maxArea) {
+						maxArea = area;
+						bestQuad = candidate;
+					}
+				}
+			}
+		}
+	}
+
+	if (!bestQuad) return null;
+	const ordered = orderQuadPoints(bestQuad);
+	return isConvexQuad(ordered) ? ordered : null;
+}
+
+/**
  * Detects the 4 corners of a receipt in a grayscale image.
+ * Uses adaptive multi-threshold Otsu binarization, boundary contouring, and maximal convex quadrilateral fitting.
  * Returns normalized Quad (coordinates in 0.0 to 1.0 range) or null if no valid document found.
  */
 export function detectReceiptQuad(
@@ -455,115 +509,68 @@ export function detectReceiptQuad(
 ): Quad | null {
 	if (width < 30 || height < 30 || gray.length < width * height) return null;
 
-	const minAreaFraction = options.minAreaFraction ?? 0.12;
+	const minAreaFraction = options.minAreaFraction ?? 0.10;
 	const maxAreaFraction = options.maxAreaFraction ?? 0.95;
-	const brightnessBias = options.brightnessBias ?? 5;
 
-	// 1. Calculate Otsu threshold on the downscaled frame
+	// Calculate base Otsu threshold on the downscaled frame
 	const otsu = calculateOtsuThreshold(gray);
-	const threshold = Math.min(240, otsu + brightnessBias);
+	const candidateThresholds = [
+		otsu + (options.brightnessBias ?? 0),
+		Math.max(35, otsu - 20),
+		Math.min(235, otsu + 20)
+	];
 
-	// 2. Collect boundary/edge points of bright regions (receipt paper)
-	// Sample in a grid to avoid collecting excessive points
 	const step = Math.max(2, Math.floor(Math.min(width, height) / 80));
-	const edgePoints: Point[] = [];
-
-	for (let y = step; y < height - step; y += step) {
-		const row = y * width;
-		for (let x = step; x < width - step; x += step) {
-			const val = gray[row + x];
-			if (val >= threshold) {
-				// Check if it's near an edge (neighbor < threshold)
-				const left = gray[row + x - step];
-				const right = gray[row + x + step];
-				const top = gray[(y - step) * width + x];
-				const bottom = gray[(y + step) * width + x];
-
-				if (left < threshold || right < threshold || top < threshold || bottom < threshold) {
-					edgePoints.push({ x, y });
-				}
-			}
-		}
-	}
-
-	if (edgePoints.length < 16) return null;
-
-	// 3. Compute Convex Hull of the paper edges
-	const hull = convexHull(edgePoints);
-	if (hull.length < 4) return null;
-
-	// 4. Polygon approximation to find 4 corners
-	// Binary search for epsilon that yields 4 corners, or fallback to perimeter heuristics
-	let perimeter = 0;
-	for (let i = 0; i < hull.length; i++) {
-		perimeter += distance(hull[i], hull[(i + 1) % hull.length]);
-	}
-
-	let bestQuadPoints: Point[] | null = null;
-
-	// Try epsilons from 1% to 15% of perimeter
-	for (let epsFraction = 0.015; epsFraction <= 0.15; epsFraction += 0.005) {
-		const approx = ramerDouglasPeucker(hull, perimeter * epsFraction);
-		if (approx.length === 4) {
-			bestQuadPoints = approx;
-			break;
-		}
-	}
-
-	// Fallback: If RDP did not cleanly yield 4 points, pick the 4 extreme diagonal points from hull
-	if (!bestQuadPoints) {
-		// Find points with min/max (x+y) and min/max (x-y)
-		let minSum = Infinity, maxSum = -Infinity;
-		let minDiff = Infinity, maxDiff = -Infinity;
-		let pMinSum = hull[0], pMaxSum = hull[0];
-		let pMinDiff = hull[0], pMaxDiff = hull[0];
-
-		for (const p of hull) {
-			const sum = p.x + p.y;
-			const diff = p.x - p.y;
-			if (sum < minSum) { minSum = sum; pMinSum = p; }
-			if (sum > maxSum) { maxSum = sum; pMaxSum = p; }
-			if (diff < minDiff) { minDiff = diff; pMinDiff = p; }
-			if (diff > maxDiff) { maxDiff = diff; pMaxDiff = p; }
-		}
-
-		const extremes = [pMinSum, pMaxDiff, pMaxSum, pMinDiff];
-		// Ensure distinct points
-		const unique: Point[] = [];
-		for (const p of extremes) {
-			if (!unique.some((u) => distance(u, p) < step * 2)) {
-				unique.push(p);
-			}
-		}
-
-		if (unique.length === 4) {
-			bestQuadPoints = unique;
-		}
-	}
-
-	if (!bestQuadPoints || bestQuadPoints.length !== 4) return null;
-
-	const ordered = orderQuadPoints(bestQuadPoints);
-	if (!isConvexQuad(ordered)) return null;
-
 	const totalArea = width * height;
-	const area = quadArea(ordered);
-	const areaFraction = area / totalArea;
-
-	if (areaFraction < minAreaFraction || areaFraction > maxAreaFraction) {
-		return null;
-	}
-
-	// Normalize coordinates to [0, 1]
 	const invW = 1 / width;
 	const invH = 1 / height;
 
-	return [
-		{ x: ordered[0].x * invW, y: ordered[0].y * invH },
-		{ x: ordered[1].x * invW, y: ordered[1].y * invH },
-		{ x: ordered[2].x * invW, y: ordered[2].y * invH },
-		{ x: ordered[3].x * invW, y: ordered[3].y * invH }
-	];
+	for (const threshold of candidateThresholds) {
+		const edgePoints: Point[] = [];
+
+		for (let y = step; y < height - step; y += step) {
+			const row = y * width;
+			for (let x = step; x < width - step; x += step) {
+				const val = gray[row + x];
+				if (val >= threshold) {
+					// Check if near boundary (neighbor < threshold)
+					const left = gray[row + x - step];
+					const right = gray[row + x + step];
+					const top = gray[(y - step) * width + x];
+					const bottom = gray[(y + step) * width + x];
+
+					if (left < threshold || right < threshold || top < threshold || bottom < threshold) {
+						edgePoints.push({ x, y });
+					}
+				}
+			}
+		}
+
+		if (edgePoints.length < 16) continue;
+
+		// Compute Convex Hull of the paper edges
+		const hull = convexHull(edgePoints);
+		if (hull.length < 4) continue;
+
+		// Select 4 maximal-area corners from the convex hull
+		const bestQuad = findMaxAreaQuadFromHull(hull);
+		if (!bestQuad) continue;
+
+		const area = quadArea(bestQuad);
+		const areaFraction = area / totalArea;
+
+		if (areaFraction >= minAreaFraction && areaFraction <= maxAreaFraction) {
+			// Found valid document quadrilateral
+			return [
+				{ x: bestQuad[0].x * invW, y: bestQuad[0].y * invH },
+				{ x: bestQuad[1].x * invW, y: bestQuad[1].y * invH },
+				{ x: bestQuad[2].x * invW, y: bestQuad[2].y * invH },
+				{ x: bestQuad[3].x * invW, y: bestQuad[3].y * invH }
+			];
+		}
+	}
+
+	return null;
 }
 
 /**

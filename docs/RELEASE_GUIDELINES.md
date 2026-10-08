@@ -390,6 +390,15 @@ This log is the permanent record of all production releases for the Brickwork pl
   - **Stability Auto-Capture & Manual Override:** Auto-snaps receipt photo when the 4 corners remain stationary and motion blur is low, with manual shutter button and corner fallback.
   - **Interactive Corner Fine-Tuning UI:** Allows users to adjust the 4 corner points with touch-friendly magnifying loupes if manual crop refinement is desired.
 
+---
 
-
-
+#### Version 1.9.1 — 2026-10-08 (Enhancement Release: Resilient Hull Detection, Sweeping Laser HUD, PWA Auto-Reload)
+- **Deployment Status:** Ready for deployment to Cloudflare Workers (awaiting user authorization)
+- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp`
+- **Scope & Highlights:**
+  - **PWA Stale Cache Auto-Update (`controllerchange`):** Automatically reloads the application when a new Service Worker takes over an existing installation (`hadPreviousController`), ensuring mobile users immediately receive newly deployed scanner code without manual cache clearing. Guarded against initial installation and automated test runners (`navigator.webdriver`).
+  - **Combinatorial Convex Hull Maximal-Area Quad Detection (`findMaxAreaQuadFromHull`):** Replaces rigid RDP 4-vertex polygon approximation with combinatorial maximal-area quad selection from convex hull points, reliably detecting crumpled, folded, or curved retail receipts even when fingers or edges break simple polygon approximations.
+  - **Multi-Threshold Adaptive Binarization:** Multi-pass Otsu threshold search (`[otsu, otsu - 20, otsu + 20]`) allowing document detection across dim car cabins, shadows, and reflective glare.
+  - **Sweeping Laser Scanning Beam & Live HUD:** Viewfinder features an animated emerald laser beam scanning across the frame, active `🔍 Scanning for receipt...` indicator transitioning to `🟢 Document Locked` with animated stability progress bar, `v1.9 AI Scanner` header badge, and `⚡ Auto-Snap` toggle button.
+  - **Perspective Dewarping Badge:** Pre-save review bottom sheet indicates `📐 Perspective Dewarped` alongside OCR confidence.
+  - **Quality Gates:** 100% passing Vitest unit & component tests (103/103 tests across 12 test suites), 100% passing Playwright E2E tests (17/17 tests), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers build verified.

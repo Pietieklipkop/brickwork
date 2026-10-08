@@ -15,6 +15,7 @@ import {
 	denormalizeQuad,
 	unwarpQuadRGBA,
 	sampleBilinearRGBA,
+	findMaxAreaQuadFromHull,
 	type Point,
 	type Quad
 } from '../document-scanner';
@@ -284,5 +285,58 @@ describe('Document Scanner & Homography Dewarping', () => {
 		expect(denorm[1]).toEqual({ x: 750, y: 200 });
 		expect(denorm[2]).toEqual({ x: 750, y: 600 });
 		expect(denorm[3]).toEqual({ x: 250, y: 600 });
+	});
+
+	it('selects 4 maximal-area corners from complex convex hulls with findMaxAreaQuadFromHull', () => {
+		// A 6-sided polygon (rectangle with bevelled corners or small edge points)
+		const hexagon: Point[] = [
+			{ x: 10, y: 10 },
+			{ x: 50, y: 10 },
+			{ x: 90, y: 10 },
+			{ x: 90, y: 90 },
+			{ x: 50, y: 90 },
+			{ x: 10, y: 90 }
+		];
+
+		const quad = findMaxAreaQuadFromHull(hexagon);
+		expect(quad).not.toBeNull();
+		if (quad) {
+			expect(quad.length).toBe(4);
+			expect(isConvexQuad(quad)).toBe(true);
+			// Maximal area should pick the extreme 4 corners: (10,10), (90,10), (90,90), (10,90)
+			expect(quadArea(quad)).toBe(6400); // 80 * 80
+		}
+	});
+
+	it('returns null from findMaxAreaQuadFromHull if hull has fewer than 4 points', () => {
+		const triangle: Point[] = [
+			{ x: 0, y: 0 },
+			{ x: 50, y: 100 },
+			{ x: 100, y: 0 }
+		];
+		expect(findMaxAreaQuadFromHull(triangle)).toBeNull();
+	});
+
+	it('detects a receipt under dim lighting conditions using adaptive thresholding', () => {
+		const w = 80;
+		const h = 80;
+		const gray = new Uint8Array(w * h);
+
+		// Dim background: value 25
+		gray.fill(25);
+
+		// Dim paper in center: value 85 (low contrast difference of 60 levels)
+		for (let y = 15; y <= 65; y++) {
+			for (let x = 15; x <= 65; x++) {
+				gray[y * w + x] = 85;
+			}
+		}
+
+		const detected = detectReceiptQuad(gray, w, h);
+		expect(detected).not.toBeNull();
+		if (detected) {
+			expect(detected.length).toBe(4);
+			expect(isConvexQuad(detected)).toBe(true);
+		}
 	});
 });

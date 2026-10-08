@@ -365,28 +365,33 @@
 			class="w-full h-full object-cover"
 		></video>
 
-		<!-- Top Controls Bar: Aspect Ratio, Auto-Snap Toggle & Torch -->
-		<div class="absolute top-4 left-0 right-0 z-20 flex items-center justify-between px-4 sm:px-5 pointer-events-auto gap-2">
-			<!-- Aspect Ratio Pill -->
-			<div class="flex items-center p-0.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 shadow-lg text-[11px] font-bold">
-				<button
-					type="button"
-					onclick={() => (slipAspect = 'standard')}
-					class="px-2.5 sm:px-3 py-1 rounded-full transition-colors {slipAspect === 'standard'
-						? 'bg-emerald-500 text-slate-950 shadow-xs'
-						: 'text-slate-300 hover:text-white'}"
-				>
-					Standard 3:4
-				</button>
-				<button
-					type="button"
-					onclick={() => (slipAspect = 'long')}
-					class="px-2.5 sm:px-3 py-1 rounded-full transition-colors {slipAspect === 'long'
-						? 'bg-emerald-500 text-slate-950 shadow-xs'
-						: 'text-slate-300 hover:text-white'}"
-				>
-					Long Slip
-				</button>
+		<!-- Top Controls Bar: Aspect Ratio, Version Tag, Auto-Snap & Torch -->
+		<div class="absolute top-4 left-0 right-0 z-20 flex items-center justify-between px-3 sm:px-5 pointer-events-auto gap-2">
+			<!-- Aspect Ratio Pill & Version Tag -->
+			<div class="flex items-center gap-1.5">
+				<div class="flex items-center p-0.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 shadow-lg text-[11px] font-bold">
+					<button
+						type="button"
+						onclick={() => (slipAspect = 'standard')}
+						class="px-2.5 sm:px-3 py-1 rounded-full transition-colors {slipAspect === 'standard'
+							? 'bg-emerald-500 text-slate-950 shadow-xs'
+							: 'text-slate-300 hover:text-white'}"
+					>
+						Standard 3:4
+					</button>
+					<button
+						type="button"
+						onclick={() => (slipAspect = 'long')}
+						class="px-2.5 sm:px-3 py-1 rounded-full transition-colors {slipAspect === 'long'
+							? 'bg-emerald-500 text-slate-950 shadow-xs'
+							: 'text-slate-300 hover:text-white'}"
+					>
+						Long Slip
+					</button>
+				</div>
+				<span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-900/90 text-emerald-400 border border-slate-700 shadow-xs">
+					v1.9
+				</span>
 			</div>
 
 			<!-- Right Controls: Auto-Snap & Torch -->
@@ -429,7 +434,7 @@
 			</div>
 		</div>
 
-		<!-- Status Badge when Document Detected (AC-25) -->
+		<!-- Status Badge: Document Locked OR Active Radar Scan (AC-25) -->
 		{#if detectedQuad}
 			<div class="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950/85 border border-emerald-500/70 text-emerald-300 text-[11px] font-bold shadow-xl backdrop-blur-md transition-all">
 				<span class="relative flex h-2 w-2">
@@ -442,6 +447,14 @@
 						<div class="h-full bg-emerald-400 transition-all duration-75" style="width: {stableProgress * 100}%"></div>
 					</div>
 				{/if}
+			</div>
+		{:else}
+			<div class="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex items-center gap-2 px-3 py-1 rounded-full bg-slate-950/75 border border-slate-700/80 text-slate-300 text-[11px] font-semibold shadow-lg backdrop-blur-md">
+				<span class="relative flex h-2 w-2">
+					<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400/50 opacity-75"></span>
+					<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+				</span>
+				<span>Scanning for receipt...</span>
 			</div>
 		{/if}
 
@@ -466,6 +479,9 @@
 				class="relative w-full transition-all duration-300 border-2 border-dashed {detectedQuad ? 'border-emerald-400/30' : 'border-emerald-400/80'} rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] {slipAspect === 'standard' ? 'max-w-sm aspect-[3/4]' : 'max-w-[260px] aspect-[1/2.2]'}"
 			>
 				{#if !detectedQuad}
+					<!-- Sweeping document laser scanning beam -->
+					<div class="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_10px_#10b981] animate-scan-beam pointer-events-none"></div>
+
 					<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 text-emerald-400 text-xs font-semibold px-3 py-0.5 rounded-full backdrop-blur-sm whitespace-nowrap">
 						{slipAspect === 'long' ? 'Align Long Slip Within Frame' : 'Align Slip Within Frame'}
 					</div>
@@ -555,3 +571,23 @@
 		class="hidden"
 	/>
 </div>
+
+<style>
+	@keyframes scan-beam {
+		0% {
+			top: 5%;
+			opacity: 0.2;
+		}
+		50% {
+			opacity: 0.95;
+		}
+		100% {
+			top: 95%;
+			opacity: 0.2;
+		}
+	}
+	:global(.animate-scan-beam) {
+		animation: scan-beam 2.4s ease-in-out infinite alternate;
+	}
+</style>
+

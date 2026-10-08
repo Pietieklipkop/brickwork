@@ -153,9 +153,14 @@
 						class="w-14 h-18 object-cover rounded-lg border border-slate-300 dark:border-slate-600 shadow-sm shrink-0"
 					/>
 					<div class="text-xs space-y-1">
-						<span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-							AI Confidence: {Math.round((extractedData.confidence || 0.8) * 100)}%
-						</span>
+						<div class="flex items-center gap-1.5 flex-wrap">
+							<span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+								AI Confidence: {Math.round((extractedData.confidence || 0.8) * 100)}%
+							</span>
+							<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
+								📐 Perspective Dewarped
+							</span>
+						</div>
 						<p class="text-slate-500 dark:text-slate-400">
 							Receipt voucher will be stored in private R2 bucket.
 						</p>

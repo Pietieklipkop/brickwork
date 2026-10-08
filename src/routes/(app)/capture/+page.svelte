@@ -237,11 +237,16 @@
 	<!-- Header & Manual Entry Trigger -->
 	<div class="flex items-center justify-between flex-wrap gap-2">
 		<div>
-			<h1 class="text-xl font-black text-slate-900 dark:text-white">
-				Capture Receipt
-			</h1>
+			<div class="flex items-center gap-2">
+				<h1 class="text-xl font-black text-slate-900 dark:text-white">
+					Capture Receipt
+				</h1>
+				<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+					v1.9 AI Scanner
+				</span>
+			</div>
 			<p class="text-xs text-slate-500 dark:text-slate-400">
-				Point camera at slip or upload an image file (AC-01, AC-19)
+				Auto-detects paper edges & dewarps perspective into flat scans
 			</p>
 		</div>
 
