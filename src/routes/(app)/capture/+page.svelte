@@ -44,7 +44,15 @@
 		}
 	});
 
+	let activeCaptureId = $state(0);
+
 	async function handleImageCapture(file: File, url: string, ocrFile?: File) {
+		if (isProcessing || showReview) {
+			// Prevent overlapping or duplicate snapshots from processing concurrently
+			return;
+		}
+
+		const captureId = ++activeCaptureId;
 		capturedFile = file;
 		capturedOcrFile = ocrFile || null;
 		previewUrl = url;
@@ -82,6 +90,10 @@
 				body: form
 			});
 
+			if (captureId !== activeCaptureId) {
+				return;
+			}
+
 			if (res.ok) {
 				const json = (await res.json()) as any;
 				if (json.data) {
@@ -98,6 +110,7 @@
 				};
 			}
 		} catch (err) {
+			if (captureId !== activeCaptureId) return;
 			console.warn('Error extracting receipt details:', err);
 			extractedData = {
 				vendorName: '',
@@ -107,8 +120,10 @@
 				confidence: 0.5
 			};
 		} finally {
-			isProcessing = false;
-			showReview = true;
+			if (captureId === activeCaptureId) {
+				isProcessing = false;
+				showReview = true;
+			}
 		}
 	}
 
@@ -222,6 +237,7 @@
 	}
 
 	function handleCancelReview() {
+		activeCaptureId++;
 		showReview = false;
 		capturedFile = null;
 		capturedOcrFile = null;
@@ -303,6 +319,7 @@
 		<CameraViewfinder
 			oncapture={handleImageCapture}
 			{isProcessing}
+			paused={showReview || isProcessing}
 		/>
 	{:else}
 		<!-- Dedicated File Upload Dropzone (AC-19) -->

@@ -404,3 +404,16 @@ This log is the permanent record of all production releases for the Brickwork pl
   - **Sweeping Laser Scanning Beam & Live HUD:** Viewfinder features an animated emerald laser beam scanning across the frame, active `🔍 Scanning for receipt...` indicator transitioning to `🟢 Document Locked` with animated stability progress bar, `v1.9 AI Scanner` header badge, and `⚡ Auto-Snap` toggle button.
   - **Perspective Dewarping Badge:** Pre-save review bottom sheet indicates `📐 Perspective Dewarped` alongside OCR confidence.
   - **Quality Gates:** 100% passing Vitest unit & component tests (103/103 tests across 12 test suites), 100% passing Playwright E2E tests (17/17 tests), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers build verified.
+
+---
+
+#### Version 1.9.2 — 2026-10-12 (Fix Release: Viewfinder Freeze on Capture & Image Synchronization)
+- **Deployment Status:** Ready for deployment to Cloudflare Workers (awaiting user authorization)
+- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp`
+- **Scope & Highlights:**
+  - **Instant Viewfinder Freeze on Capture:** When a picture is taken (via auto-snap or manual shutter button), `videoEl.pause()` and `stopDetectionLoop()` are invoked synchronously. Live tracking polygons, corner nodes, laser scan beam, and shutter controls are immediately hidden. The viewfinder freezes on the exact captured frame with a dedicated "Receipt Captured • Dewarping & extracting details..." visual badge.
+  - **Immutable Single-Source Frame Snapshot:** Captures the video frame synchronously into an off-screen `HTMLCanvasElement` at the moment of shutter trigger. Both the natural-color original image saved to Cloudflare R2 and the high-contrast enhanced image sent to Workers AI OCR are derived from this single immutable canvas, guaranteeing zero temporal discrepancy between the saved voucher and the extracted financial fields.
+  - **Capture Concurrency Token & Background Suppression:** Added `paused={showReview || isProcessing}` prop to `CameraViewfinder` and an `activeCaptureId` concurrency token in `/capture`, guaranteeing that background camera loops or duplicate auto-snaps cannot trigger while the pre-save review sheet is open, eliminating race conditions where subsequent frames overwrote the saved receipt image.
+  - **Interactive Receipt Lightbox Zoom:** Added a tap-to-enlarge zoom feature in `PreSaveBottomSheet` on the receipt thumbnail, allowing users to tap and visually inspect the full dewarped receipt image before persisting.
+  - **Quality Gates:** 100% passing Vitest unit & component tests (103/103 tests across 12 test suites), 100% passing Playwright E2E tests (17/17 tests), and `svelte-check` (0 errors, 0 warnings). Production Cloudflare Workers build verified.
+

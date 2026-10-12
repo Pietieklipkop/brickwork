@@ -57,6 +57,7 @@
 	let notes = $state('');
 	let isReimbursable = $state(false);
 	let reimbursableCompanyId = $state('');
+	let isEnlarged = $state(false);
 
 	$effect(() => {
 		vendorName = extractedData.vendorName || '';
@@ -147,11 +148,22 @@
 			<!-- Receipt Image Thumbnail & AI Confidence -->
 			{#if previewUrl}
 				<div class="flex items-center space-x-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
-					<img
-						src={previewUrl}
-						alt="Captured receipt thumbnail"
-						class="w-14 h-18 object-cover rounded-lg border border-slate-300 dark:border-slate-600 shadow-sm shrink-0"
-					/>
+					<button
+						type="button"
+						onclick={() => (isEnlarged = true)}
+						class="relative group rounded-lg overflow-hidden shrink-0 border border-slate-300 dark:border-slate-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+						title="Tap to preview full receipt"
+						aria-label="Enlarge captured receipt preview"
+					>
+						<img
+							src={previewUrl}
+							alt="Captured receipt thumbnail"
+							class="w-14 h-18 object-cover transition-transform group-hover:scale-105"
+						/>
+						<span class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-bold">
+							Zoom
+						</span>
+					</button>
 					<div class="text-xs space-y-1">
 						<div class="flex items-center gap-1.5 flex-wrap">
 							<span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
@@ -162,7 +174,7 @@
 							</span>
 						</div>
 						<p class="text-slate-500 dark:text-slate-400">
-							Receipt voucher will be stored in private R2 bucket.
+							Tap thumbnail to inspect full receipt. Stored in R2 bucket.
 						</p>
 					</div>
 				</div>
@@ -334,4 +346,34 @@
 			</div>
 		</form>
 	</div>
+
+	<!-- Receipt Lightbox Zoom Modal (AC-02) -->
+	{#if isEnlarged && previewUrl}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-150"
+			onclick={() => (isEnlarged = false)}
+		>
+			<div class="relative max-w-lg max-h-[90vh] w-full flex flex-col items-center">
+				<button
+					type="button"
+					onclick={() => (isEnlarged = false)}
+					class="self-end mb-2 p-2 rounded-full bg-slate-800 text-white hover:bg-slate-700 shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"
+					aria-label="Close enlarged receipt preview"
+				>
+					<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<line x1="18" y1="6" x2="6" y2="18"></line>
+						<line x1="6" y1="6" x2="18" y2="18"></line>
+					</svg>
+				</button>
+				<img
+					src={previewUrl}
+					alt="Full captured receipt"
+					class="max-w-full max-h-[78vh] object-contain rounded-xl shadow-2xl border border-slate-700"
+				/>
+				<span class="text-xs text-slate-300 mt-2 font-medium">Tap anywhere to close zoom</span>
+			</div>
+		</div>
+	{/if}
 </div>

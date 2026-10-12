@@ -447,7 +447,7 @@ export function applyOcrFiltersToCanvas(sourceCanvas: HTMLCanvasElement): HTMLCa
  * Crops a video stream snapshot to the exact dimensions of the viewfinder reticle.
  */
 export function cropVideoToReticle(
-	video: HTMLVideoElement,
+	video: HTMLVideoElement | HTMLCanvasElement,
 	containerEl: HTMLElement,
 	reticleEl: HTMLElement,
 	maxDim = 1600
@@ -455,8 +455,8 @@ export function cropVideoToReticle(
 	const containerRect = containerEl.getBoundingClientRect();
 	const reticleRect = reticleEl.getBoundingClientRect();
 
-	const videoWidth = video.videoWidth || 1920;
-	const videoHeight = video.videoHeight || 1080;
+	const videoWidth = ('videoWidth' in video ? video.videoWidth : video.width) || 1920;
+	const videoHeight = ('videoHeight' in video ? video.videoHeight : video.height) || 1080;
 
 	const crop = calculateReticleCrop(
 		containerRect.width,
@@ -512,7 +512,7 @@ export function cropVideoToReticle(
  * - previewUrl: Blob URL for immediate UI review
  */
 export async function processReceiptSnapshot(
-	video: HTMLVideoElement,
+	video: HTMLVideoElement | HTMLCanvasElement,
 	containerEl?: HTMLElement | null,
 	reticleEl?: HTMLElement | null,
 	detectedQuad?: Quad | null
@@ -525,8 +525,8 @@ export async function processReceiptSnapshot(
 		croppedCanvas = cropVideoToReticle(video, containerEl, reticleEl, 1600);
 	} else {
 		croppedCanvas = document.createElement('canvas');
-		const w = video.videoWidth || 1280;
-		const h = video.videoHeight || 720;
+		const w = ('videoWidth' in video ? video.videoWidth : video.width) || 1280;
+		const h = ('videoHeight' in video ? video.videoHeight : video.height) || 720;
 		croppedCanvas.width = w;
 		croppedCanvas.height = h;
 		const ctx = croppedCanvas.getContext('2d');

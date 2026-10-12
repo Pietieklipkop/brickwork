@@ -16,9 +16,10 @@
 	interface Props {
 		oncapture: (file: File, previewUrl: string, ocrFile?: File) => void;
 		isProcessing?: boolean;
+		paused?: boolean;
 	}
 
-	let { oncapture, isProcessing = false }: Props = $props();
+	let { oncapture, isProcessing = false, paused = false }: Props = $props();
 
 	let containerEl: HTMLElement | null = $state(null);
 	let reticleEl: HTMLElement | null = $state(null);
@@ -27,6 +28,8 @@
 	let stream: MediaStream | null = $state(null);
 	let cameraActive = $state(false);
 	let cameraStarting = $state(true);
+	let isFrozen = $state(false);
+	let frozenPreviewUrl = $state<string | null>(null);
 	let cameraError = $state('');
 	let hasTorch = $state(false);
 	let isTorchOn = $state(false);
@@ -129,8 +132,7 @@
 		const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
 
 		const detectFrame = (timestamp: number) => {
-			if (!cameraActive || isProcessing || !videoEl) {
-				rafId = requestAnimationFrame(detectFrame);
+			if (!cameraActive || isProcessing || isFrozen || paused || !videoEl) {
 				return;
 			}
 
@@ -239,10 +241,34 @@
 		if (videoEl) {
 			videoEl.srcObject = null;
 		}
+		if (frozenPreviewUrl) {
+			URL.revokeObjectURL(frozenPreviewUrl);
+			frozenPreviewUrl = null;
+		}
 		cameraActive = false;
 		cameraStarting = false;
+		isFrozen = false;
 		isTorchOn = false;
 	}
+
+	function resumeCamera() {
+		isFrozen = false;
+		if (frozenPreviewUrl) {
+			URL.revokeObjectURL(frozenPreviewUrl);
+			frozenPreviewUrl = null;
+		}
+		statusAnnouncement = 'Camera ready. Align receipt within frame.';
+		if (videoEl && cameraActive) {
+			videoEl.play().catch(() => {});
+			startDetectionLoop();
+		}
+	}
+
+	$effect(() => {
+		if (!paused && isFrozen && !isProcessing) {
+			resumeCamera();
+		}
+	});
 
 	function getSvgPolygonPoints(quad: Quad): string {
 		if (!containerEl || !videoEl) return '';
@@ -288,7 +314,14 @@
 	}
 
 	async function takeSnapshot() {
-		if (!videoEl || !cameraActive || isProcessing) return;
+		if (!videoEl || !cameraActive || isProcessing || isFrozen || paused) return;
+
+		// Immediately pause video and mark as frozen so detection and live feed freeze instantly
+		isFrozen = true;
+
+		// Grab the current quad detection snapshot before stopping loop
+		const activeQuad = detectedQuad ? ([...detectedQuad] as Quad) : null;
+		stopDetectionLoop();
 
 		// Trigger visual flash
 		isFlashing = true;
@@ -301,14 +334,38 @@
 			} catch (_) {}
 		}
 
-		statusAnnouncement = detectedQuad
+		statusAnnouncement = activeQuad
 			? 'Document boundary locked. Dewarping perspective and enhancing for AI OCR...'
 			: 'Capturing receipt, auto-cropping, and enhancing for AI OCR...';
 
+		// Capture the exact video frame into an immutable canvas immediately
+		const vw = videoEl.videoWidth || 1280;
+		const vh = videoEl.videoHeight || 720;
+		const frameCanvas = document.createElement('canvas');
+		frameCanvas.width = vw;
+		frameCanvas.height = vh;
+		const frameCtx = frameCanvas.getContext('2d');
+		if (frameCtx) {
+			frameCtx.drawImage(videoEl, 0, 0, vw, vh);
+		}
+
+		// Pause the video element playback
 		try {
-			const activeQuad = detectedQuad ? ([...detectedQuad] as Quad) : null;
+			videoEl.pause();
+		} catch (_) {}
+
+		// Create frozen preview URL directly from the frame canvas
+		if (frozenPreviewUrl) {
+			URL.revokeObjectURL(frozenPreviewUrl);
+			frozenPreviewUrl = null;
+		}
+		try {
+			frozenPreviewUrl = frameCanvas.toDataURL('image/jpeg', 0.85);
+		} catch (_) {}
+
+		try {
 			const { originalFile, ocrFile, previewUrl } = await processReceiptSnapshot(
-				videoEl,
+				frameCanvas,
 				containerEl,
 				reticleEl,
 				activeQuad
@@ -320,32 +377,8 @@
 			console.warn('Optimized snapshot processing failed, using fallback:', err);
 		}
 
-		// Fallback snapshot if elements or canvas error
-		const canvas = document.createElement('canvas');
-		const videoWidth = videoEl.videoWidth || 1280;
-		const videoHeight = videoEl.videoHeight || 720;
-		const maxDim = 1600;
-		let targetWidth = videoWidth;
-		let targetHeight = videoHeight;
-
-		if (targetWidth > maxDim || targetHeight > maxDim) {
-			if (targetWidth > targetHeight) {
-				targetHeight = Math.round((targetHeight * maxDim) / targetWidth);
-				targetWidth = maxDim;
-			} else {
-				targetWidth = Math.round((targetWidth * maxDim) / targetHeight);
-				targetHeight = maxDim;
-			}
-		}
-
-		canvas.width = targetWidth;
-		canvas.height = targetHeight;
-		const ctx = canvas.getContext('2d');
-		if (!ctx) return;
-
-		ctx.drawImage(videoEl, 0, 0, targetWidth, targetHeight);
-
-		canvas.toBlob(
+		// Fallback snapshot using frameCanvas if processReceiptSnapshot fails
+		frameCanvas.toBlob(
 			(blob) => {
 				if (!blob) return;
 				const file = new File([blob], `receipt_${Date.now()}.webp`, { type: 'image/webp' });
@@ -363,15 +396,26 @@
 		const file = input.files?.[0];
 		if (!file) return;
 
+		// Freeze viewfinder and stop detection when an image file is selected
+		isFrozen = true;
+		stopDetectionLoop();
+		if (videoEl) {
+			try {
+				videoEl.pause();
+			} catch (_) {}
+		}
+
 		statusAnnouncement = 'Receipt file selected. Optimizing image and enhancing text...';
 
 		try {
 			const { originalFile, ocrFile, previewUrl } = await processUploadedImageFile(file);
+			frozenPreviewUrl = previewUrl;
 			statusAnnouncement = 'Receipt optimized. Processing with AI vision model...';
 			oncapture(originalFile, previewUrl, ocrFile);
 		} catch (err) {
 			console.warn('Uploaded image enhancement failed, using raw fallback:', err);
 			const previewUrl = URL.createObjectURL(file);
+			frozenPreviewUrl = previewUrl;
 			oncapture(file, previewUrl, file);
 		}
 	}
@@ -398,10 +442,24 @@
 		autoplay
 		playsinline
 		muted
-		class="w-full h-full object-cover {cameraActive ? 'block' : 'hidden'}"
+		class="w-full h-full object-cover {cameraActive && !isFrozen ? 'block' : 'hidden'}"
 	></video>
 
-	{#if cameraActive}
+	<!-- Frozen Still Frame Preview (Active immediately on capture) -->
+	{#if isFrozen && frozenPreviewUrl}
+		<img
+			src={frozenPreviewUrl}
+			alt="Captured receipt frame"
+			class="w-full h-full object-cover block"
+		/>
+		<div class="absolute inset-0 bg-slate-950/40 backdrop-blur-xs flex flex-col items-center justify-center z-30 pointer-events-none">
+			<span class="loading loading-spinner text-emerald-400 loading-lg mb-3"></span>
+			<span class="text-white font-bold text-sm tracking-wide">Receipt Captured</span>
+			<span class="text-xs text-emerald-300 mt-1">Dewarping & extracting details...</span>
+		</div>
+	{/if}
+
+	{#if cameraActive && !isFrozen}
 
 		<!-- Top Controls Bar: Aspect Ratio, Version Tag, Auto-Snap & Torch -->
 		<div class="absolute top-4 left-0 right-0 z-20 flex items-center justify-between px-3 sm:px-5 pointer-events-auto gap-2">
