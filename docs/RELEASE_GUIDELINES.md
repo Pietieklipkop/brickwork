@@ -407,9 +407,10 @@ This log is the permanent record of all production releases for the Brickwork pl
 
 ---
 
-#### Version 1.9.2 — 2026-10-12 (Fix Release: Viewfinder Freeze on Capture & Image Synchronization)
-- **Deployment Status:** Ready for deployment to Cloudflare Workers (awaiting user authorization)
-- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp`
+#### Version 1.9.2 — 2026-10-14 (Fix Release: Viewfinder Freeze on Capture & Image Synchronization)
+- **Deployment Status:** Deployed to Cloudflare Workers (Version ID: `d4c8fdb2-6dd2-44f2-9231-b7172896a3dd`)
+- **Target Branch:** `feat/v1.9-document-scanner-and-perspective-dewarp` (Commit: `0bbd976`)
+- **Merge Status:** Branch pushed to GitHub, awaiting manual user merge into `main`.
 - **Scope & Highlights:**
   - **Instant Viewfinder Freeze on Capture:** When a picture is taken (via auto-snap or manual shutter button), `videoEl.pause()` and `stopDetectionLoop()` are invoked synchronously. Live tracking polygons, corner nodes, laser scan beam, and shutter controls are immediately hidden. The viewfinder freezes on the exact captured frame with a dedicated "Receipt Captured • Dewarping & extracting details..." visual badge.
   - **Immutable Single-Source Frame Snapshot:** Captures the video frame synchronously into an off-screen `HTMLCanvasElement` at the moment of shutter trigger. Both the natural-color original image saved to Cloudflare R2 and the high-contrast enhanced image sent to Workers AI OCR are derived from this single immutable canvas, guaranteeing zero temporal discrepancy between the saved voucher and the extracted financial fields.
