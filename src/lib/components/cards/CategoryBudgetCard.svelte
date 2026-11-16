@@ -21,7 +21,7 @@
 
 	let percentage = $derived(calculateBudgetPercentage(spentCents, targetCents));
 
-	let status = $derived(() => {
+	let status = $derived.by(() => {
 		if (targetCents <= 0) {
 			return spentCents > 0 ? 'exceeded' : 'safe';
 		}
@@ -46,7 +46,7 @@
 			onclick?.();
 		}
 	}}
-	class="group relative w-full p-4 rounded-xl border bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-[#0B2240] dark:focus-visible:outline-emerald-400 cursor-pointer {status() ===
+	class="group relative w-full p-4 rounded-xl border bg-white dark:bg-slate-900 shadow-sm transition-all duration-150 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-[#0B2240] dark:focus-visible:outline-emerald-400 cursor-pointer {status ===
 	'exceeded'
 		? 'border-rose-300 dark:border-rose-900/70 bg-rose-50/20 dark:bg-rose-950/10'
 		: 'border-slate-200 dark:border-slate-800'}"
@@ -65,11 +65,11 @@
 		</div>
 
 		<!-- Status Badge -->
-		{#if status() === 'safe'}
+		{#if status === 'safe'}
 			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 shrink-0">
 				Safe ({percentage}%)
 			</span>
-		{:else if status() === 'warning'}
+		{:else if status === 'warning'}
 			<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shrink-0">
 				Warning ({percentage}%)
 			</span>
@@ -100,9 +100,9 @@
 		aria-label="{name} budget progress"
 	>
 		<div
-			class="h-full rounded-full transition-all duration-300 ease-out {status() === 'safe'
+			class="h-full rounded-full transition-all duration-300 ease-out {status === 'safe'
 				? 'bg-emerald-500'
-				: status() === 'warning'
+				: status === 'warning'
 					? 'bg-amber-500'
 					: 'bg-rose-500'}"
 			style="width: {progressWidth}%;"
@@ -111,7 +111,7 @@
 
 	<!-- Footer Row: Remaining / Exceeded Subtext + Chevron Icon -->
 	<div class="flex items-center justify-between text-xs">
-		{#if status() === 'exceeded'}
+		{#if status === 'exceeded'}
 			<span class="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
 				Exceeded by {formatZAR(exceededCents)}
 			</span>

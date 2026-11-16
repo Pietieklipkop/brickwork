@@ -17,35 +17,41 @@ export const GET: RequestHandler = async ({ params, locals, platform }) => {
 		throw error(500, 'Receipt storage service is unavailable');
 	}
 
-	// Security Verification: Key format is receipts/{companyId}/...
-	// Verify user has access to this company or expense
-	const parts = key.split('/');
-	const companyId = parts.length > 1 ? parts[1] : null;
+	// Security Verification: Key format must strictly match receipts/{companyId}/{YYYY}/{MM}/{expenseId}(-ocr)?.{ext}
+	const RECEIPT_KEY_RE =
+		/^receipts\/([0-9a-f-]{36})\/\d{4}\/\d{2}\/[0-9a-f-]{36}(-ocr)?\.(webp|jpg|jpeg|png)$/i;
+	const match = RECEIPT_KEY_RE.exec(key);
+	if (!match) {
+		throw error(400, 'Invalid receipt key');
+	}
+	const companyId = match[1];
 
-	if (platform?.env?.DB && companyId) {
-		const db = getDb(platform.env.DB);
-		const userCompany = await db.query.company.findFirst({
-			where: and(eq(company.id, companyId), eq(company.ownerUserId, locals.user.id))
+	if (!platform?.env?.DB) {
+		throw error(500, 'Database service is unavailable');
+	}
+
+	const db = getDb(platform.env.DB);
+	const userCompany = await db.query.company.findFirst({
+		where: and(eq(company.id, companyId), eq(company.ownerUserId, locals.user.id))
+	});
+
+	if (!userCompany) {
+		// Check if user is a registered member of this company
+		const memberRecord = await db.query.companyMember.findFirst({
+			where: and(eq(companyMember.companyId, companyId), eq(companyMember.userId, locals.user.id))
 		});
 
-		if (!userCompany) {
-			// Check if user is a registered member of this company
-			const memberRecord = await db.query.companyMember.findFirst({
-				where: and(eq(companyMember.companyId, companyId), eq(companyMember.userId, locals.user.id))
+		if (!memberRecord) {
+			// Also check if user owns the expense associated with this receipt key (original or OCR variant)
+			const userExpense = await db.query.expense.findFirst({
+				where: and(
+					or(eq(expense.receiptImageKey, key), eq(expense.ocrImageKey, key)),
+					eq(expense.userId, locals.user.id)
+				)
 			});
 
-			if (!memberRecord) {
-				// Also check if user owns the expense associated with this receipt key (original or OCR variant)
-				const userExpense = await db.query.expense.findFirst({
-					where: and(
-						or(eq(expense.receiptImageKey, key), eq(expense.ocrImageKey, key)),
-						eq(expense.userId, locals.user.id)
-					)
-				});
-
-				if (!userExpense) {
-					throw error(403, 'Forbidden: You do not have access to this receipt.');
-				}
+			if (!userExpense) {
+				throw error(403, 'Forbidden: You do not have access to this receipt.');
 			}
 		}
 	}
@@ -60,6 +66,8 @@ export const GET: RequestHandler = async ({ params, locals, platform }) => {
 	object.writeHttpMetadata(headers);
 	headers.set('ETag', object.httpEtag);
 	headers.set('Cache-Control', 'private, max-age=31536000, immutable');
+	headers.set('X-Content-Type-Options', 'nosniff');
+	headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
 
 	return new Response(object.body, {
 		headers

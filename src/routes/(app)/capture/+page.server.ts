@@ -8,6 +8,7 @@ import {
 	ocrAccuracyLog as ocrAccuracyLogTable
 } from '$lib/server/db/schema';
 import { uploadReceiptToR2 } from '$lib/server/storage';
+import { hasCompanyAccess, verifyAccountInCompany, verifyCategoryInCompany } from '$lib/server/authz';
 import { formatSastIsoDate } from '$lib/domain/billing';
 import { compareOcrExtraction } from '$lib/domain/ocr-metrics';
 import { eq } from 'drizzle-orm';
@@ -72,11 +73,19 @@ export const actions: Actions = {
 
 		const db = getDb(platform.env.DB);
 
-		// Resolve active company
+		// Resolve and authorize active company
 		let activeCompanyId: string | undefined = cookies.get('brickwork_active_company');
+		if (activeCompanyId) {
+			const authorized = await hasCompanyAccess(db, locals.user.id, activeCompanyId);
+			if (!authorized) {
+				activeCompanyId = undefined;
+			}
+		}
 		if (!activeCompanyId) {
 			const [u] = await db.select().from(userTable).where(eq(userTable.id, locals.user.id)).limit(1);
-			activeCompanyId = u?.defaultCompanyId ?? undefined;
+			if (u?.defaultCompanyId && (await hasCompanyAccess(db, locals.user.id, u.defaultCompanyId))) {
+				activeCompanyId = u.defaultCompanyId;
+			}
 		}
 		if (!activeCompanyId) {
 			const [comp] = await db.select().from(companyTable).where(eq(companyTable.ownerUserId, locals.user.id)).limit(1);
@@ -84,6 +93,17 @@ export const actions: Actions = {
 		}
 		if (!activeCompanyId) {
 			return fail(400, { error: 'No company profile found to attach expense to.' });
+		}
+
+		// Verify categoryId, accountId, and reimbursableCompanyId belong to authorized scope
+		if (!(await verifyCategoryInCompany(db, categoryId, activeCompanyId))) {
+			return fail(403, { error: 'Selected spend category does not belong to the active company.' });
+		}
+		if (accountId && !(await verifyAccountInCompany(db, accountId, activeCompanyId))) {
+			return fail(403, { error: 'Selected payment account does not belong to the active company.' });
+		}
+		if (reimbursableCompanyId && !(await hasCompanyAccess(db, locals.user.id, reimbursableCompanyId))) {
+			return fail(403, { error: 'Unauthorized reimbursable company selected.' });
 		}
 
 		const expenseId = crypto.randomUUID();

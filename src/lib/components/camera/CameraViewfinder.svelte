@@ -29,6 +29,7 @@
 	let cameraActive = $state(false);
 	let cameraStarting = $state(true);
 	let isFrozen = $state(false);
+	let isCapturing = $state(false);
 	let frozenPreviewUrl = $state<string | null>(null);
 	let cameraError = $state('');
 	let hasTorch = $state(false);
@@ -253,10 +254,11 @@
 
 	function resumeCamera() {
 		isFrozen = false;
-		if (frozenPreviewUrl) {
+		isCapturing = false;
+		if (frozenPreviewUrl && frozenPreviewUrl.startsWith('blob:')) {
 			URL.revokeObjectURL(frozenPreviewUrl);
-			frozenPreviewUrl = null;
 		}
+		frozenPreviewUrl = null;
 		statusAnnouncement = 'Camera ready. Align receipt within frame.';
 		if (videoEl && cameraActive) {
 			videoEl.play().catch(() => {});
@@ -265,7 +267,7 @@
 	}
 
 	$effect(() => {
-		if (!paused && isFrozen && !isProcessing) {
+		if (!paused && isFrozen && !isProcessing && !isCapturing) {
 			resumeCamera();
 		}
 	});
@@ -314,9 +316,10 @@
 	}
 
 	async function takeSnapshot() {
-		if (!videoEl || !cameraActive || isProcessing || isFrozen || paused) return;
+		if (!videoEl || !cameraActive || isProcessing || isCapturing || isFrozen || paused) return;
 
-		// Immediately pause video and mark as frozen so detection and live feed freeze instantly
+		// Immediately pause video and mark as frozen/capturing so detection and live feed freeze instantly
+		isCapturing = true;
 		isFrozen = true;
 
 		// Grab the current quad detection snapshot before stopping loop
@@ -355,10 +358,10 @@
 		} catch (_) {}
 
 		// Create frozen preview URL directly from the frame canvas
-		if (frozenPreviewUrl) {
+		if (frozenPreviewUrl && frozenPreviewUrl.startsWith('blob:')) {
 			URL.revokeObjectURL(frozenPreviewUrl);
-			frozenPreviewUrl = null;
 		}
+		frozenPreviewUrl = null;
 		try {
 			frozenPreviewUrl = frameCanvas.toDataURL('image/jpeg', 0.85);
 		} catch (_) {}
@@ -371,6 +374,7 @@
 				activeQuad
 			);
 			statusAnnouncement = 'Receipt captured. Processing with AI vision model...';
+			isCapturing = false;
 			oncapture(originalFile, previewUrl, ocrFile);
 			return;
 		} catch (err) {
@@ -380,6 +384,7 @@
 		// Fallback snapshot using frameCanvas if processReceiptSnapshot fails
 		frameCanvas.toBlob(
 			(blob) => {
+				isCapturing = false;
 				if (!blob) return;
 				const file = new File([blob], `receipt_${Date.now()}.webp`, { type: 'image/webp' });
 				const previewUrl = URL.createObjectURL(blob);
@@ -397,6 +402,7 @@
 		if (!file) return;
 
 		// Freeze viewfinder and stop detection when an image file is selected
+		isCapturing = true;
 		isFrozen = true;
 		stopDetectionLoop();
 		if (videoEl) {
@@ -411,11 +417,13 @@
 			const { originalFile, ocrFile, previewUrl } = await processUploadedImageFile(file);
 			frozenPreviewUrl = previewUrl;
 			statusAnnouncement = 'Receipt optimized. Processing with AI vision model...';
+			isCapturing = false;
 			oncapture(originalFile, previewUrl, ocrFile);
 		} catch (err) {
 			console.warn('Uploaded image enhancement failed, using raw fallback:', err);
 			const previewUrl = URL.createObjectURL(file);
 			frozenPreviewUrl = previewUrl;
+			isCapturing = false;
 			oncapture(file, previewUrl, file);
 		}
 	}

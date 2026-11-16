@@ -55,7 +55,9 @@ sw.addEventListener('fetch', (event) => {
 					fetch(event.request).then((response) => {
 						if (response.status === 200) {
 							const copy = response.clone();
-							caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+							event.waitUntil(
+								caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy))
+							);
 						}
 						return response;
 					})
@@ -65,31 +67,14 @@ sw.addEventListener('fetch', (event) => {
 		return;
 	}
 
-	// Network-first strategy for HTML pages and dynamic application routes
+	// Network-only for authenticated pages, APIs, and private receipts (never cache sensitive financial data)
 	event.respondWith(
-		fetch(event.request)
-			.then((response) => {
-				if (response.status === 200) {
-					const copy = response.clone();
-					caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-				}
-				return response;
-			})
-			.catch(async () => {
-				const cached = await caches.match(event.request);
-				if (cached) return cached;
-
-				// Return cached dashboard shell if offline navigation
-				if (event.request.mode === 'navigate') {
-					const dashboardShell = await caches.match('/dashboard');
-					if (dashboardShell) return dashboardShell;
-				}
-
-				return new Response('You are offline. Please connect to the internet to sync expenses.', {
-					status: 503,
-					statusText: 'Service Unavailable',
-					headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-				});
-			})
+		fetch(event.request).catch(() => {
+			return new Response('You are offline. Please connect to the internet to sync expenses.', {
+				status: 503,
+				statusText: 'Service Unavailable',
+				headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+			});
+		})
 	);
 });

@@ -1,8 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { hashPassword } from 'better-auth/crypto';
-import { getDb, passwordResetToken, account } from '$lib/server/db';
+import { getDb, passwordResetToken, account, session } from '$lib/server/db';
+import { sha256Hex } from '$lib/server/authz';
 
 export const load: PageServerLoad = async ({ url, platform }) => {
 	const token = url.searchParams.get('token');
@@ -16,8 +17,9 @@ export const load: PageServerLoad = async ({ url, platform }) => {
 	}
 
 	const db = getDb(platform.env.DB);
+	const tokenHash = await sha256Hex(token);
 	const record = await db.query.passwordResetToken.findFirst({
-		where: eq(passwordResetToken.tokenHash, token)
+		where: eq(passwordResetToken.tokenHash, tokenHash)
 	});
 
 	if (!record) {
@@ -59,33 +61,40 @@ export const actions: Actions = {
 		}
 
 		const db = getDb(platform.env.DB);
-		const record = await db.query.passwordResetToken.findFirst({
-			where: eq(passwordResetToken.tokenHash, token)
-		});
+		const tokenHash = await sha256Hex(token);
+		const now = new Date();
 
-		if (!record || record.usedAt || record.expiresAt.getTime() < Date.now()) {
+		// Atomically consume the reset token to prevent concurrent reuse
+		const [consumed] = await db
+			.update(passwordResetToken)
+			.set({ usedAt: now })
+			.where(
+				and(
+					eq(passwordResetToken.tokenHash, tokenHash),
+					isNull(passwordResetToken.usedAt),
+					gt(passwordResetToken.expiresAt, now)
+				)
+			)
+			.returning({ userId: passwordResetToken.userId });
+
+		if (!consumed) {
 			return fail(400, { error: 'Reset token is invalid or has expired.' });
 		}
 
 		// Hash new password using Better Auth's standard hasher
 		const hashedPassword = await hashPassword(password);
 
-		// Update account password in D1
-		await db
-			.update(account)
-			.set({
-				password: hashedPassword,
-				updatedAt: new Date()
-			})
-			.where(eq(account.userId, record.userId));
-
-		// Mark token as consumed
-		await db
-			.update(passwordResetToken)
-			.set({
-				usedAt: new Date()
-			})
-			.where(eq(passwordResetToken.id, record.id));
+		// Update account password and revoke all active sessions in D1 atomically
+		await db.batch([
+			db
+				.update(account)
+				.set({
+					password: hashedPassword,
+					updatedAt: now
+				})
+				.where(eq(account.userId, consumed.userId)),
+			db.delete(session).where(eq(session.userId, consumed.userId))
+		]);
 
 		throw redirect(303, '/login?reset=success');
 	}

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import { deserialize } from '$app/forms';
 	import { centsToZar } from '$lib/domain/currency';
 	import CurrencyInputField from '$lib/components/forms/CurrencyInputField.svelte';
 	import PrimaryActionButton from '$lib/components/ui/PrimaryActionButton.svelte';
@@ -102,15 +103,18 @@
 		try {
 			const res = await fetch('/expenses?/updateExpense', {
 				method: 'POST',
-				body: form
+				body: form,
+				headers: { accept: 'application/json' }
 			});
 
-			if (res.ok) {
+			const result = deserialize(await res.text());
+			if (result.type === 'success') {
 				editingExpense = null;
 				await invalidateAll();
+			} else if (result.type === 'failure') {
+				updateError = (result.data as any)?.error || 'Failed to update expense. Please check your inputs.';
 			} else {
-				const result = (await res.json().catch(() => null)) as any;
-				updateError = result?.error || 'Failed to update expense. Please check your inputs.';
+				updateError = 'Failed to update expense. Please check your inputs.';
 			}
 		} catch (err: any) {
 			updateError = err?.message || 'A network error occurred.';
@@ -129,10 +133,12 @@
 		try {
 			const res = await fetch('/expenses?/deleteExpense', {
 				method: 'POST',
-				body: form
+				body: form,
+				headers: { accept: 'application/json' }
 			});
 
-			if (res.ok) {
+			const result = deserialize(await res.text());
+			if (result.type === 'success') {
 				deletingExpenseId = null;
 				await invalidateAll();
 			}

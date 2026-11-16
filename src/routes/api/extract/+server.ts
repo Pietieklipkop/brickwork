@@ -2,7 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { eq } from 'drizzle-orm';
 import { getDb, category, paymentAccount } from '$lib/server/db';
+import { hasCompanyAccess } from '$lib/server/authz';
 import { sanitizeExtractedReceipt, buildExtractionPrompt } from '$lib/domain/extraction';
+import { formatSastIsoDate } from '$lib/domain/billing';
+
+const MAX_EXTRACTION_IMAGE_BYTES = 10 * 1024 * 1024;
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	if (!locals.user) {
@@ -17,13 +21,21 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		if (!imageFile) {
 			return json({ error: 'No image provided for receipt extraction.' }, { status: 400 });
 		}
+		if (imageFile.size > MAX_EXTRACTION_IMAGE_BYTES) {
+			return json({ error: 'Image exceeds 10MB extraction limit.' }, { status: 400 });
+		}
 
-		// Load available categories and payment accounts for this company
+		// Load available categories and payment accounts for this company (with tenant authorization)
 		let availableCategories: { id: string; name: string }[] = [];
 		let availableAccounts: Array<{ id: string; name: string; cardNumber: string | null; isDefault: boolean }> = [];
 
 		if (platform?.env?.DB && companyId) {
 			const db = getDb(platform.env.DB);
+			const authorized = await hasCompanyAccess(db, locals.user.id, companyId);
+			if (!authorized) {
+				return json({ error: 'Forbidden: You do not have access to this company.' }, { status: 403 });
+			}
+
 			const cats = await db.query.category.findMany({
 				where: eq(category.companyId, companyId)
 			});
@@ -97,14 +109,19 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			}
 		}
 
-		// If Workers AI is unavailable (e.g. local dev without GPU), provide realistic fallback extraction
+		// If Workers AI is unavailable or failed, return an empty manual-entry fallback (never fabricated data)
 		if (!rawOutput) {
-			rawOutput = {
-				vendor_name: 'Woolworths Food',
-				amount: 349.5,
-				transaction_date: new Date().toISOString().split('T')[0],
-				suggested_category: 'Groceries'
-			};
+			return json({
+				success: false,
+				fallback: true,
+				data: {
+					vendorName: '',
+					amountCents: 0,
+					transactionDate: formatSastIsoDate(new Date()),
+					suggestedCategoryId: availableCategories[0]?.id || '',
+					confidence: 0
+				}
+			});
 		}
 
 		const sanitized = sanitizeExtractedReceipt(rawOutput, availableCategories, availableAccounts);
@@ -115,8 +132,11 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		});
 	} catch (err: any) {
 		console.error('Receipt extraction failed:', err);
-		return json({
-			error: err?.message || 'Failed to process receipt image.'
-		}, { status: 500 });
+		return json(
+			{
+				error: 'Failed to process receipt image.'
+			},
+			{ status: 500 }
+		);
 	}
 };

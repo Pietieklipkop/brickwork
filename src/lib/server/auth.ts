@@ -4,10 +4,19 @@ import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { getRequestEvent } from '$app/server';
 import { getDb, schema } from '$lib/server/db';
 
-export const createAuth = (d1: D1Database, appUrl?: string, secret?: string) =>
-	betterAuth({
-		baseURL: appUrl || 'http://localhost:5173',
-		secret: secret || 'brickwork-enterprise-secret-key-min-32-chars-long!',
+export const createAuth = (d1: D1Database, appUrl?: string, secret?: string) => {
+	const resolvedUrl = appUrl || 'http://localhost:5173';
+	const isLocalDev =
+		resolvedUrl.startsWith('http://localhost') || resolvedUrl.startsWith('http://127.0.0.1');
+	const resolvedSecret = secret || (isLocalDev ? 'brickwork-local-dev-secret-min-32-chars!!' : '');
+
+	if (!resolvedSecret) {
+		throw new Error('BETTER_AUTH_SECRET environment secret is required in non-local environments.');
+	}
+
+	return betterAuth({
+		baseURL: resolvedUrl,
+		secret: resolvedSecret,
 		emailAndPassword: {
 			enabled: true,
 			requireEmailVerification: false
@@ -46,5 +55,6 @@ export const createAuth = (d1: D1Database, appUrl?: string, secret?: string) =>
 			sveltekitCookies(getRequestEvent) // must be last plugin
 		]
 	});
+};
 
 export type AppAuth = ReturnType<typeof createAuth>;

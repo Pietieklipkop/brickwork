@@ -11,8 +11,8 @@ import {
 	ocrAccuracyLog as ocrAccuracyLogTable
 } from '$lib/server/db/schema';
 import { seedBusinessCompany } from '$lib/server/db/seed';
-import { eq, and, asc, desc, isNotNull } from 'drizzle-orm';
-import { compareOcrExtraction, calculateOcrSummaryStats } from '$lib/domain/ocr-metrics';
+import { deleteReceiptsFromR2 } from '$lib/server/storage';
+import { eq, and, asc, desc, sql } from 'drizzle-orm';
 
 async function checkCanManageCategories(db: ReturnType<typeof getDb>, companyId: string, userId: string): Promise<boolean> {
 	const [comp] = await db
@@ -106,78 +106,40 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 		.where(eq(paymentAccountTable.companyId, activeCompany.id))
 		.orderBy(desc(paymentAccountTable.isDefault), asc(paymentAccountTable.createdAt));
 
-	// Backfill historical expenses that have rawAiExtraction if not yet recorded in ocrAccuracyLog
-	try {
-		const existingLogRows = await db
-			.select({ expenseId: ocrAccuracyLogTable.expenseId })
-			.from(ocrAccuracyLogTable)
-			.where(eq(ocrAccuracyLogTable.companyId, activeCompany.id));
-		const existingLogExpenseIds = new Set(existingLogRows.map((r) => r.expenseId).filter(Boolean));
-
-		const unloggedExpenses = await db
-			.select()
-			.from(expenseTable)
-			.where(
-				and(
-					eq(expenseTable.companyId, activeCompany.id),
-					isNotNull(expenseTable.rawAiExtraction)
-				)
-			);
-
-		for (const exp of unloggedExpenses) {
-			if (!exp.rawAiExtraction || existingLogExpenseIds.has(exp.id)) continue;
-			try {
-				const extracted = JSON.parse(exp.rawAiExtraction);
-				const comparison = compareOcrExtraction(extracted, {
-					vendorName: exp.vendorName,
-					amountCents: exp.amountCents,
-					transactionDate: exp.transactionDate,
-					categoryId: exp.categoryId
-				});
-
-				await db.insert(ocrAccuracyLogTable).values({
-					expenseId: exp.id,
-					companyId: exp.companyId,
-					userId: exp.userId,
-					status: comparison.status,
-					fieldsChangedCount: comparison.fieldsChangedCount,
-					vendorExtracted: extracted.vendorName || null,
-					vendorFinal: exp.vendorName,
-					vendorChanged: comparison.vendorChanged,
-					amountExtractedCents: extracted.amountCents ?? null,
-					amountFinalCents: exp.amountCents,
-					amountChanged: comparison.amountChanged,
-					dateExtracted: extracted.transactionDate || null,
-					dateFinal: exp.transactionDate,
-					dateChanged: comparison.dateChanged,
-					categoryExtractedId: extracted.suggestedCategoryId || null,
-					categoryFinalId: exp.categoryId,
-					categoryChanged: comparison.categoryChanged,
-					rawOcrPayload: exp.rawAiExtraction,
-					createdAt: exp.createdAt
-				});
-				existingLogExpenseIds.add(exp.id);
-			} catch (parseErr) {
-				console.warn('Skipping unparseable rawAiExtraction for expense:', exp.id, parseErr);
-			}
-		}
-	} catch (backfillErr) {
-		console.warn('Failed to backfill OCR accuracy log:', backfillErr);
-	}
-
-	// Calculate overall accuracy statistics across all company scans
-	const allCompanyOcrRecords = await db
+	// Calculate overall accuracy statistics across all company scans via SQL aggregation
+	const [statsRow] = await db
 		.select({
-			status: ocrAccuracyLogTable.status,
-			vendorChanged: ocrAccuracyLogTable.vendorChanged,
-			amountChanged: ocrAccuracyLogTable.amountChanged,
-			dateChanged: ocrAccuracyLogTable.dateChanged,
-			categoryChanged: ocrAccuracyLogTable.categoryChanged
+			totalScans: sql<number>`count(*)`,
+			fullSuccessCount: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.status} = 'full_success' then 1 else 0 end), 0)`,
+			partialFailCount: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.status} = 'partial_fail' then 1 else 0 end), 0)`,
+			totalFailCount: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.status} = 'total_fail' then 1 else 0 end), 0)`,
+			vendorCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.vendorChanged} = 0 then 1 else 0 end), 0)`,
+			amountCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.amountChanged} = 0 then 1 else 0 end), 0)`,
+			dateCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.dateChanged} = 0 then 1 else 0 end), 0)`,
+			categoryCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.categoryChanged} = 0 then 1 else 0 end), 0)`
 		})
 		.from(ocrAccuracyLogTable)
 		.where(eq(ocrAccuracyLogTable.companyId, activeCompany.id));
 
-	const ocrStats = calculateOcrSummaryStats(allCompanyOcrRecords);
+	const totalScans = Number(statsRow?.totalScans ?? 0);
+	const fullSuccessCount = Number(statsRow?.fullSuccessCount ?? 0);
+	const partialFailCount = Number(statsRow?.partialFailCount ?? 0);
+	const totalFailCount = Number(statsRow?.totalFailCount ?? 0);
+	const pct = (n: number) => (totalScans > 0 ? Math.round((n / totalScans) * 100) : 0);
+
+	const ocrStats = {
+		totalScans,
+		fullSuccessCount,
+		fullSuccessRate: pct(fullSuccessCount),
+		partialFailCount,
+		partialFailRate: pct(partialFailCount),
+		totalFailCount,
+		totalFailRate: pct(totalFailCount),
+		vendorAccuracyRate: pct(Number(statsRow?.vendorCorrect ?? 0)),
+		amountAccuracyRate: pct(Number(statsRow?.amountCorrect ?? 0)),
+		dateAccuracyRate: pct(Number(statsRow?.dateCorrect ?? 0)),
+		categoryAccuracyRate: pct(Number(statsRow?.categoryCorrect ?? 0))
+	};
 
 	// Load recent 50 scans for the audit breakdown table
 	const ocrLogsRaw = await db
@@ -329,7 +291,23 @@ export const actions: Actions = {
 				return fail(400, { error: 'The default Personal profile cannot be deleted.' });
 			}
 
+			// Collect all R2 receipt keys before cascading company deletion in D1
+			const companyReceipts = await db
+				.select({
+					receiptImageKey: expenseTable.receiptImageKey,
+					ocrImageKey: expenseTable.ocrImageKey
+				})
+				.from(expenseTable)
+				.where(eq(expenseTable.companyId, companyId));
+
 			await db.delete(companyTable).where(eq(companyTable.id, companyId));
+
+			const keysToDelete = companyReceipts
+				.flatMap((r) => [r.receiptImageKey, r.ocrImageKey])
+				.filter((k): k is string => Boolean(k));
+			if (keysToDelete.length > 0 && platform?.env?.RECEIPTS_BUCKET) {
+				await deleteReceiptsFromR2(platform.env.RECEIPTS_BUCKET, keysToDelete);
+			}
 
 			// If current active company was deleted, clear cookie
 			if (cookies.get('brickwork_active_company') === companyId) {

@@ -4,6 +4,7 @@
 	import type { ExtractedReceiptData } from '$lib/domain/extraction';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { deserialize } from '$app/forms';
 
 	import { processUploadedImageFile } from '$lib/domain/image-filters';
 
@@ -18,7 +19,9 @@
 		}
 	});
 
+	let isOptimizing = $state(false);
 	let isProcessing = $state(false);
+	let isBusy = $derived(isOptimizing || isProcessing);
 	let isSaving = $state(false);
 	let showReview = $state(false);
 	let previewUrl = $state('');
@@ -132,14 +135,17 @@
 			saveError = 'Please upload a valid image file (PNG, JPG, WebP).';
 			return;
 		}
+		if (isBusy || showReview) return;
 
 		saveError = '';
-		isProcessing = true;
+		isOptimizing = true;
 
 		try {
 			const { originalFile, ocrFile, previewUrl } = await processUploadedImageFile(file);
+			isOptimizing = false;
 			await handleImageCapture(originalFile, previewUrl, ocrFile);
 		} catch (err: any) {
+			isOptimizing = false;
 			console.warn('Advanced file optimization failed, using raw fallback:', err);
 			const preview = URL.createObjectURL(file);
 			await handleImageCapture(file, preview, file);
@@ -220,14 +226,20 @@
 		try {
 			const res = await fetch('/capture', {
 				method: 'POST',
-				body: form
+				body: form,
+				headers: { accept: 'application/json' }
 			});
 
-			if (res.ok || res.redirected) {
+			const result = deserialize(await res.text());
+			if (result.type === 'redirect') {
+				goto(result.location);
+			} else if (result.type === 'success') {
 				goto('/dashboard');
+			} else if (result.type === 'failure') {
+				saveError = (result.data as any)?.error || 'Failed to save expense. Please check your details and try again.';
+				isSaving = false;
 			} else {
-				const result = (await res.json().catch(() => null)) as any;
-				saveError = result?.error || 'Failed to save expense. Please check your details and try again.';
+				saveError = 'An unexpected error occurred while saving.';
 				isSaving = false;
 			}
 		} catch (err: any) {
@@ -239,6 +251,9 @@
 	function handleCancelReview() {
 		activeCaptureId++;
 		showReview = false;
+		if (previewUrl && previewUrl.startsWith('blob:')) {
+			URL.revokeObjectURL(previewUrl);
+		}
 		capturedFile = null;
 		capturedOcrFile = null;
 		previewUrl = '';
@@ -308,7 +323,7 @@
 	</div>
 
 	{#if saveError}
-		<div class="alert alert-error text-sm rounded-xl p-3 shadow-sm">
+		<div role="alert" class="alert alert-error text-sm rounded-xl p-3 shadow-sm">
 			<span>{saveError}</span>
 		</div>
 	{/if}
@@ -335,7 +350,7 @@
 				: 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-600'}"
 		>
 			<div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center mb-4 shadow-inner">
-				{#if isProcessing}
+				{#if isBusy}
 					<span class="loading loading-spinner loading-md text-[#0B2240] dark:text-emerald-400"></span>
 				{:else}
 					<svg class="w-8 h-8 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -346,14 +361,15 @@
 				{/if}
 			</div>
 
-			{#if isProcessing}
-				<h2 class="text-base font-bold text-slate-900 dark:text-white">
-					Processing Receipt Image...
-				</h2>
-				<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
-					Extracting merchant, total, and category using Cloudflare Workers AI vision model.
-				</p>
-			{:else}
+			<div aria-live="polite">
+				{#if isBusy}
+					<h2 class="text-base font-bold text-slate-900 dark:text-white">
+						Processing Receipt Image...
+					</h2>
+					<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
+						Extracting merchant, total, and category using Cloudflare Workers AI vision model.
+					</p>
+				{:else}
 				<h2 class="text-base font-bold text-slate-900 dark:text-white">
 					Drop Receipt File Here or Click to Browse
 				</h2>
@@ -368,6 +384,7 @@
 					Browse Files
 				</button>
 			{/if}
+			</div>
 
 			<!-- Hidden File Input WITHOUT forced mobile camera -->
 			<input

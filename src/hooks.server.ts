@@ -11,7 +11,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const { DB } = event.platform.env;
-	const auth = createAuth(DB, event.url.origin);
+	const envRecord = event.platform.env as unknown as Record<string, string | undefined>;
+	const authSecret = envRecord.BETTER_AUTH_SECRET;
+	const auth = createAuth(DB, event.url.origin, authSecret);
 	event.locals.auth = auth;
 
 	try {

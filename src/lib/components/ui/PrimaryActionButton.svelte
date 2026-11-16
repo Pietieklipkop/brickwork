@@ -29,7 +29,7 @@
 		trailingIcon
 	}: Props = $props();
 
-	let variantClasses = $derived(() => {
+	let variantClasses = $derived.by(() => {
 		switch (variant) {
 			case 'emerald':
 				return 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white focus-visible:outline-emerald-600';
@@ -52,7 +52,7 @@
 	{onclick}
 	class="inline-flex items-center justify-center h-12 px-6 rounded-lg font-semibold text-[15px] tracking-wide shadow-sm border border-transparent transition-all duration-150 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 disabled:shadow-none {fullWidth
 		? 'w-full sm:w-auto sm:min-w-[140px]'
-		: ''} {variantClasses()} {className}"
+		: ''} {variantClasses} {className}"
 >
 	{#if loading}
 		<svg
