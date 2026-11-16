@@ -32,7 +32,9 @@
 				return;
 			}
 
-			const redirectTo = page.url.searchParams.get('redirectTo') || '/dashboard';
+			const rawRedirect = page.url.searchParams.get('redirectTo') || '/dashboard';
+			const redirectTo =
+				rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/dashboard';
 			await goto(redirectTo, { invalidateAll: true });
 		} catch (err: any) {
 			errorMessage = err?.message || 'An unexpected error occurred. Please try again.';

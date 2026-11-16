@@ -1,14 +1,22 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
-import { expense as expenseTable, user as userTable, company as companyTable } from '$lib/server/db/schema';
+import {
+	expense as expenseTable,
+	user as userTable,
+	company as companyTable,
+	ocrAccuracyLog as ocrAccuracyLogTable
+} from '$lib/server/db/schema';
 import { uploadReceiptToR2 } from '$lib/server/storage';
+import { hasCompanyAccess, verifyAccountInCompany, verifyCategoryInCompany } from '$lib/server/authz';
 import { formatSastIsoDate } from '$lib/domain/billing';
+import { compareOcrExtraction } from '$lib/domain/ocr-metrics';
 import { eq } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ parent }) => {
-	const { activeCompany, categories, paymentAccounts } = await parent();
+	const { companies, activeCompany, categories, paymentAccounts } = await parent();
 	return {
+		companies,
 		activeCompany,
 		categories,
 		paymentAccounts
@@ -31,6 +39,12 @@ export const actions: Actions = {
 		const notes = String(formData.get('notes') || '').trim() || null;
 		const rawAiExtraction = String(formData.get('rawAiExtraction') || '').trim() || null;
 		const imageFile = formData.get('image') as File | null;
+		const ocrImageFile = formData.get('ocrImage') as File | null;
+		const isReimbursableRaw = formData.get('isReimbursable');
+		const isReimbursable = isReimbursableRaw === 'true' || isReimbursableRaw === 'on';
+		const reimbursableCompanyId = isReimbursable
+			? String(formData.get('reimbursableCompanyId') || '').trim() || null
+			: null;
 
 		// Validation (AC-11)
 		if (!vendorName) {
@@ -59,11 +73,19 @@ export const actions: Actions = {
 
 		const db = getDb(platform.env.DB);
 
-		// Resolve active company
+		// Resolve and authorize active company
 		let activeCompanyId: string | undefined = cookies.get('brickwork_active_company');
+		if (activeCompanyId) {
+			const authorized = await hasCompanyAccess(db, locals.user.id, activeCompanyId);
+			if (!authorized) {
+				activeCompanyId = undefined;
+			}
+		}
 		if (!activeCompanyId) {
 			const [u] = await db.select().from(userTable).where(eq(userTable.id, locals.user.id)).limit(1);
-			activeCompanyId = u?.defaultCompanyId ?? undefined;
+			if (u?.defaultCompanyId && (await hasCompanyAccess(db, locals.user.id, u.defaultCompanyId))) {
+				activeCompanyId = u.defaultCompanyId;
+			}
 		}
 		if (!activeCompanyId) {
 			const [comp] = await db.select().from(companyTable).where(eq(companyTable.ownerUserId, locals.user.id)).limit(1);
@@ -73,10 +95,22 @@ export const actions: Actions = {
 			return fail(400, { error: 'No company profile found to attach expense to.' });
 		}
 
+		// Verify categoryId, accountId, and reimbursableCompanyId belong to authorized scope
+		if (!(await verifyCategoryInCompany(db, categoryId, activeCompanyId))) {
+			return fail(403, { error: 'Selected spend category does not belong to the active company.' });
+		}
+		if (accountId && !(await verifyAccountInCompany(db, accountId, activeCompanyId))) {
+			return fail(403, { error: 'Selected payment account does not belong to the active company.' });
+		}
+		if (reimbursableCompanyId && !(await hasCompanyAccess(db, locals.user.id, reimbursableCompanyId))) {
+			return fail(403, { error: 'Unauthorized reimbursable company selected.' });
+		}
+
 		const expenseId = crypto.randomUUID();
 		let receiptImageKey: string | null = null;
+		let ocrImageKey: string | null = null;
 
-		// Upload receipt image to Cloudflare R2 if present (AC-01, AC-03)
+		// Upload receipt image to Cloudflare R2 if present (AC-01, AC-03, AC-24)
 		if (imageFile && imageFile.size > 0) {
 			if (imageFile.size > 10 * 1024 * 1024) {
 				return fail(400, { error: 'Receipt image exceeds 10MB limit.' });
@@ -90,10 +124,30 @@ export const actions: Actions = {
 						companyId: activeCompanyId,
 						expenseId,
 						imageBytes: arrayBuffer,
-						mimeType: imageFile.type || 'image/webp'
+						mimeType: imageFile.type || 'image/webp',
+						variant: 'original'
 					});
 				} catch (err) {
 					console.error('Failed to upload receipt to R2:', err);
+				}
+			}
+		}
+
+		// Upload preprocessed/filtered OCR image to Cloudflare R2 if present (AC-24)
+		if (ocrImageFile && ocrImageFile.size > 0) {
+			if (platform?.env?.RECEIPTS_BUCKET) {
+				try {
+					const ocrArrayBuffer = await ocrImageFile.arrayBuffer();
+					ocrImageKey = await uploadReceiptToR2({
+						r2Bucket: platform.env.RECEIPTS_BUCKET,
+						companyId: activeCompanyId,
+						expenseId,
+						imageBytes: ocrArrayBuffer,
+						mimeType: ocrImageFile.type || 'image/jpeg',
+						variant: 'ocr'
+					});
+				} catch (err) {
+					console.error('Failed to upload filtered OCR receipt image to R2:', err);
 				}
 			}
 		}
@@ -109,9 +163,49 @@ export const actions: Actions = {
 			amountCents: Math.round(amountCents),
 			transactionDate,
 			receiptImageKey,
+			ocrImageKey,
 			rawAiExtraction,
-			notes
+			notes,
+			isReimbursable,
+			reimbursableCompanyId
 		});
+
+		// If an AI extraction payload was passed, log accuracy metrics (AC-23)
+		if (rawAiExtraction) {
+			try {
+				const extracted = JSON.parse(rawAiExtraction);
+				const comparison = compareOcrExtraction(extracted, {
+					vendorName,
+					amountCents: Math.round(amountCents),
+					transactionDate,
+					categoryId
+				});
+
+				await db.insert(ocrAccuracyLogTable).values({
+					id: crypto.randomUUID(),
+					expenseId,
+					companyId: activeCompanyId,
+					userId: locals.user.id,
+					status: comparison.status,
+					fieldsChangedCount: comparison.fieldsChangedCount,
+					vendorExtracted: extracted.vendorName || null,
+					vendorFinal: vendorName,
+					vendorChanged: comparison.vendorChanged,
+					amountExtractedCents: extracted.amountCents ?? null,
+					amountFinalCents: Math.round(amountCents),
+					amountChanged: comparison.amountChanged,
+					dateExtracted: extracted.transactionDate || null,
+					dateFinal: transactionDate,
+					dateChanged: comparison.dateChanged,
+					categoryExtractedId: extracted.suggestedCategoryId || null,
+					categoryFinalId: categoryId,
+					categoryChanged: comparison.categoryChanged,
+					rawOcrPayload: rawAiExtraction
+				});
+			} catch (logErr) {
+				console.warn('Failed to record OCR accuracy log:', logErr);
+			}
+		}
 
 		throw redirect(303, '/dashboard');
 	}

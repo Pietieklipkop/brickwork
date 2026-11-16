@@ -60,8 +60,23 @@ export function parseDecimalStringToCents(input: string | number | null | undefi
 	const isNegative = cleaned.startsWith('-');
 	const positiveStr = isNegative ? cleaned.slice(1) : cleaned;
 
-	// Normalize comma decimal separator to dot
-	const normalized = positiveStr.replace(',', '.');
+	// Disambiguate thousands separators (e.g. "1,234.50", "1.234,50", "1,234") vs decimal separator ("349,50")
+	const hasComma = positiveStr.includes(',');
+	const hasDot = positiveStr.includes('.');
+	let normalized = positiveStr;
+
+	if (hasComma && hasDot) {
+		const lastComma = positiveStr.lastIndexOf(',');
+		const lastDot = positiveStr.lastIndexOf('.');
+		normalized =
+			lastComma > lastDot
+				? positiveStr.replace(/\./g, '').replace(',', '.')
+				: positiveStr.replace(/,/g, '');
+	} else if (hasComma) {
+		normalized = /,\d{3}(?:,\d{3})*$/.test(positiveStr)
+			? positiveStr.replace(/,/g, '')
+			: positiveStr.replace(/,/g, '.');
+	}
 
 	if (!normalized.includes('.')) {
 		const randsOnly = parseInt(normalized.replace(/[^\d]/g, ''), 10);

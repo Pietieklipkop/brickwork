@@ -1,18 +1,27 @@
-import { fail, redirect } from '@sveltejs/kit';
+import { fail, redirect, error } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
-import { expense as expenseTable, category as categoryTable, company as companyTable } from '$lib/server/db/schema';
-import { deleteReceiptFromR2 } from '$lib/server/storage';
+import { expense as expenseTable, category as categoryTable, company as companyTable, paymentAccount as paymentAccountTable } from '$lib/server/db/schema';
+import { deleteReceiptsFromR2 } from '$lib/server/storage';
+import { verifyCategoryInCompany } from '$lib/server/authz';
 import { calculateCycleWindow, formatSastIsoDate } from '$lib/domain/billing';
 import { and, eq, gte, lte, like, desc, inArray } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 
 export const load: PageServerLoad = async ({ parent, url, platform }) => {
 	const { user, companies, activeCompany } = await parent();
 
 	const cycleWindow = calculateCycleWindow(user.monthStartDay ?? 1);
 
-	// Parse search/filter query parameters (AC-09)
-	const selectedCompanyId = url.searchParams.get('company') || activeCompany.id;
+	// Parse search/filter query parameters (AC-09) and enforce tenant authorization
+	const requestedCompanyId = url.searchParams.get('company') || activeCompany.id;
+	if (
+		requestedCompanyId !== 'all' &&
+		!companies.some((c) => c.id === requestedCompanyId)
+	) {
+		throw error(403, 'Forbidden: You do not have access to this company.');
+	}
+	const selectedCompanyId = requestedCompanyId;
 	const dateFilter = url.searchParams.get('dateFilter') || 'current_cycle';
 	let from = url.searchParams.get('from') || '';
 	let to = url.searchParams.get('to') || '';
@@ -68,21 +77,32 @@ export const load: PageServerLoad = async ({ parent, url, platform }) => {
 		conditions.push(eq(expenseTable.categoryId, categoryId));
 	}
 
+	const reimbursableComp = alias(companyTable, 'reimbursable_comp');
+
 	const expenses = await db
 		.select({
 			id: expenseTable.id,
+			userId: expenseTable.userId,
 			vendorName: expenseTable.vendorName,
 			amountCents: expenseTable.amountCents,
 			transactionDate: expenseTable.transactionDate,
 			receiptImageKey: expenseTable.receiptImageKey,
+			ocrImageKey: expenseTable.ocrImageKey,
 			notes: expenseTable.notes,
 			categoryId: expenseTable.categoryId,
 			categoryName: categoryTable.name,
 			categoryColor: categoryTable.colorHex,
-			companyId: expenseTable.companyId
+			companyId: expenseTable.companyId,
+			accountId: expenseTable.accountId,
+			accountName: paymentAccountTable.name,
+			isReimbursable: expenseTable.isReimbursable,
+			reimbursableCompanyId: expenseTable.reimbursableCompanyId,
+			reimbursableCompanyName: reimbursableComp.name
 		})
 		.from(expenseTable)
 		.leftJoin(categoryTable, eq(expenseTable.categoryId, categoryTable.id))
+		.leftJoin(paymentAccountTable, eq(expenseTable.accountId, paymentAccountTable.id))
+		.leftJoin(reimbursableComp, eq(expenseTable.reimbursableCompanyId, reimbursableComp.id))
 		.where(and(...conditions))
 		.orderBy(desc(expenseTable.transactionDate), desc(expenseTable.createdAt));
 
@@ -144,6 +164,10 @@ export const actions: Actions = {
 			return fail(403, { error: 'Unauthorized to modify this expense.' });
 		}
 
+		if (categoryId && !(await verifyCategoryInCompany(db, categoryId, existingExpense.companyId))) {
+			return fail(403, { error: 'Category does not belong to this expense company.' });
+		}
+
 		await db
 			.update(expenseTable)
 			.set({
@@ -177,24 +201,25 @@ export const actions: Actions = {
 
 		const db = getDb(platform.env.DB);
 
-		// Fetch expense to check ownership and get receipt key
-		const [existingExpense] = await db
-			.select()
-			.from(expenseTable)
-			.where(eq(expenseTable.id, expenseId))
-			.limit(1);
+		// Delete D1 record first and return receipt keys for R2 purge (AC-04, AC-24)
+		const [deleted] = await db
+			.delete(expenseTable)
+			.where(and(eq(expenseTable.id, expenseId), eq(expenseTable.userId, locals.user.id)))
+			.returning({
+				receiptImageKey: expenseTable.receiptImageKey,
+				ocrImageKey: expenseTable.ocrImageKey
+			});
 
-		if (!existingExpense || existingExpense.userId !== locals.user.id) {
+		if (!deleted) {
 			return fail(403, { error: 'Unauthorized to delete this expense.' });
 		}
 
-		// Atomically delete receipt voucher from R2 (AC-04)
-		if (existingExpense.receiptImageKey && platform?.env?.RECEIPTS_BUCKET) {
-			await deleteReceiptFromR2(platform.env.RECEIPTS_BUCKET, existingExpense.receiptImageKey);
+		const keysToDelete = [deleted.receiptImageKey, deleted.ocrImageKey].filter(
+			(k): k is string => Boolean(k)
+		);
+		if (keysToDelete.length > 0 && platform?.env?.RECEIPTS_BUCKET) {
+			await deleteReceiptsFromR2(platform.env.RECEIPTS_BUCKET, keysToDelete);
 		}
-
-		// Delete record from Cloudflare D1
-		await db.delete(expenseTable).where(eq(expenseTable.id, expenseId));
 
 		return { success: true, deletedId: expenseId };
 	}

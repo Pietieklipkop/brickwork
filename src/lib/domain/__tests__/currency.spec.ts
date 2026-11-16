@@ -60,6 +60,14 @@ describe('Currency Domain Engine', () => {
 			expect(parseDecimalStringToCents('R 1 250,50')).toBe(125050);
 		});
 
+		it('handles thousands separators without 1000x corruption', () => {
+			expect(parseDecimalStringToCents('1,234.50')).toBe(123450);
+			expect(parseDecimalStringToCents('R 1,234.50')).toBe(123450);
+			expect(parseDecimalStringToCents('12,345,678.90')).toBe(1234567890);
+			expect(parseDecimalStringToCents('1.234,50')).toBe(123450);
+			expect(parseDecimalStringToCents('1,234')).toBe(123400);
+		});
+
 		it('handles integer rand strings without decimals', () => {
 			expect(parseDecimalStringToCents('150')).toBe(15000);
 			expect(parseDecimalStringToCents('R 200')).toBe(20000);

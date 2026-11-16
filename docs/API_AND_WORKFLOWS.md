@@ -87,18 +87,19 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
 ### 3.1 Expense Actions (`/capture` and `/expenses/+page.server.ts`)
 
 #### `create` Action
-1. Validates form data: `vendorName`, `amountCents`, `transactionDate`, `companyId`, `categoryId`, `accountId`, `receiptImageBase64`.
-2. Generates unique expense ID `exp_${nanoid()}` and R2 key:
+1. Validates form data: `vendorName`, `amountCents`, `transactionDate`, `companyId`, `categoryId`, `accountId`, `receiptImageBase64`, `isReimbursable`, `reimbursableCompanyId`.
+2. If `isReimbursable` is true, validates that active company is Personal and `reimbursableCompanyId` references an active business company.
+3. Generates unique expense ID `exp_${nanoid()}` and R2 key:
    ```text
    receipts/${companyId}/${year}/${month}/${expenseId}.jpg
    ```
-3. Writes binary buffer to Cloudflare R2 via `platform.env.RECEIPTS_BUCKET.put()`.
-4. Inserts row into D1 `expenses` table.
-5. Redirects to `/` with success toast notification.
+4. Writes binary buffer to Cloudflare R2 via `platform.env.RECEIPTS_BUCKET.put()`.
+5. Inserts row into D1 `expenses` table.
+6. Redirects to `/dashboard` with success notification.
 
 #### `update` Action
 1. Validates user ownership or company access.
-2. Updates editable fields (`vendorName`, `amountCents`, `transactionDate`, `categoryId`, `accountId`) in D1.
+2. Updates editable fields (`vendorName`, `amountCents`, `transactionDate`, `categoryId`, `accountId`, `isReimbursable`, `reimbursableCompanyId`) in D1.
 
 #### `delete` Action
 1. Retrieves target expense from D1 to get `receiptImageKey`.
@@ -107,16 +108,21 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
 
 ---
 
-### 3.2 Company & Category Actions (`/manage/+page.server.ts`)
+### 3.2 Company & Category Actions (`/manage/+page.server.ts` & `/settings/+page.server.ts`)
 
 - `createCompany`: Main Member only. Creates company record and seeds default starter categories and default payment account.
-- `updateCompany`: Renames company. Personal company cannot be renamed or deleted.
-- `deleteCompany`: Main Member only. Cascades deletion to linked categories, accounts, and expenses (with corresponding R2 object cleanup).
-- `createCategory`: Adds category with initial monthly spend target.
-- `updateCategory`: Updates category name, color, and `monthlyTargetCents`.
-- `deleteCategory`: Soft checks that no historical expenses reference the category before deletion.
-- `createPaymentAccount`: Adds account (e.g. "FNB Credit Card").
-- `setDefaultPaymentAccount`: Sets target account `isDefault = true` and unsets other accounts for the company.
+- `updateCompany`: Renames company (Creator/Owner only). Personal company cannot be renamed or deleted.
+- `deleteCompany`: Creator/Owner only. Cascades deletion to linked categories, accounts, members, and expenses (with corresponding R2 object cleanup).
+- `createCategory`: Creator/Owner OR member with `canManageCategories = true`. Adds category with initial monthly spend target.
+- `updateCategory`: Creator/Owner OR member with `canManageCategories = true`. Updates category name, color, and `monthlyTargetCents`.
+- `deleteCategory`: Creator/Owner OR member with `canManageCategories = true`. Soft checks that no historical expenses reference the category before deletion.
+- `addCompanyMember`: Creator/Owner only. Accepts `email` and `canManageCategories`. Verifies registered user exists and creates `company_member` link.
+- `removeCompanyMember`: Creator/Owner only. Accepts `memberId` and revokes company access.
+- `toggleMemberCategoryPermission`: Creator/Owner only. Updates `canManageCategories` flag for target member.
+- `createPaymentAccount`: Creator/Owner. Accepts `name` and optional `isDefault`. If `isDefault` is set or if this is the company's first card, unsets other defaults and sets this card as default.
+- `updatePaymentAccount`: Creator/Owner. Accepts `id` and `name`. Updates payment card/account name.
+- `deletePaymentAccount`: Creator/Owner. Accepts `id`. Prevents deletion if only one card remains for the company. If the deleted card was default, automatically designates the oldest remaining card as default.
+- `setDefaultPaymentAccount`: Creator/Owner. Accepts `id`. Sets target card `isDefault = true` and all other company cards `isDefault = false`.
 
 ---
 
@@ -124,7 +130,7 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
 
 - `updateSettings`:
   - `monthStartDay`: Integer 1–28. Validates bounds; immediately recalculates active cycle on next dashboard load.
-  - `defaultCompanyId`: References valid company ID owned by user.
+  - `defaultCompanyId`: References valid company ID owned or collaborated on by user.
 
 ---
 
@@ -148,3 +154,28 @@ If Cloudflare AI fails to respond within 2.5 seconds or fails schema validation:
   2. Hashes new password and updates Better Auth account credential.
   3. Marks token as used (`usedAt = Date.now()`).
   4. Revokes existing user sessions to force fresh login.
+
+---
+
+### 3.5 Dashboard Date Range Filtering (`GET /dashboard?from=...&to=...`) (AC-17)
+
+- Query Parameters:
+  - `from`: Start date in `YYYY-MM-DD` format.
+  - `to`: End date in `YYYY-MM-DD` format.
+- Processing:
+  - If both `from` and `to` are present and valid, overrides default `calculateCycleWindow(monthStartDay)`.
+  - Aggregates `cycleExpenses` within `[from, to]` for active company.
+  - Returns `isFiltered: true`, active `startDate`, and `endDate` to client.
+  - Enables warning styling on the Filter trigger button (`btn-warning`).
+
+---
+
+### 3.6 Digital / Emailed Receipt File Upload (`/capture`) (AC-19)
+
+- Workflow:
+  1. User selects "Upload File" tab on `/capture` or drops file onto drag-and-drop zone.
+  2. Client-side validation checks file MIME type (`image/png`, `image/jpeg`, `image/webp`).
+  3. Image is downscaled to max 1600px via HTML5 Canvas and compressed to WebP (0.82 quality) in the browser.
+  4. Dispatches to `POST /api/extract` for Cloudflare Workers AI OCR extraction.
+  5. Advances to `PreSaveBottomSheet` populated with extracted metadata and local preview.
+

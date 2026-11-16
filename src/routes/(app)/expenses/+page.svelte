@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
+	import { deserialize } from '$app/forms';
 	import { centsToZar } from '$lib/domain/currency';
 	import CurrencyInputField from '$lib/components/forms/CurrencyInputField.svelte';
 	import PrimaryActionButton from '$lib/components/ui/PrimaryActionButton.svelte';
@@ -38,8 +39,18 @@
 	let deletingExpenseId: string | null = $state(null);
 	let isDeleting = $state(false);
 
-	// Receipt preview state
-	let previewImageKey: string | null = $state(null);
+	// Receipt preview state (AC-03, AC-24)
+	let previewExpense: any = $state(null);
+	let previewImageMode = $state<'original' | 'ocr' | 'compare'>('original');
+
+	function openReceiptPreview(exp: any, mode: 'original' | 'ocr' | 'compare' = 'original') {
+		previewExpense = exp;
+		previewImageMode = mode;
+	}
+
+	function closeReceiptPreview() {
+		previewExpense = null;
+	}
 
 	function applyFilters() {
 		const params = new URLSearchParams();
@@ -92,15 +103,18 @@
 		try {
 			const res = await fetch('/expenses?/updateExpense', {
 				method: 'POST',
-				body: form
+				body: form,
+				headers: { accept: 'application/json' }
 			});
 
-			if (res.ok) {
+			const result = deserialize(await res.text());
+			if (result.type === 'success') {
 				editingExpense = null;
 				await invalidateAll();
+			} else if (result.type === 'failure') {
+				updateError = (result.data as any)?.error || 'Failed to update expense. Please check your inputs.';
 			} else {
-				const result = (await res.json().catch(() => null)) as any;
-				updateError = result?.error || 'Failed to update expense. Please check your inputs.';
+				updateError = 'Failed to update expense. Please check your inputs.';
 			}
 		} catch (err: any) {
 			updateError = err?.message || 'A network error occurred.';
@@ -119,10 +133,12 @@
 		try {
 			const res = await fetch('/expenses?/deleteExpense', {
 				method: 'POST',
-				body: form
+				body: form,
+				headers: { accept: 'application/json' }
 			});
 
-			if (res.ok) {
+			const result = deserialize(await res.text());
+			if (result.type === 'success') {
 				deletingExpenseId = null;
 				await invalidateAll();
 			}
@@ -321,10 +337,10 @@
 					<div class="flex items-start space-x-3.5 min-w-0">
 						<!-- Receipt Thumbnail Trigger -->
 						<div class="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
-							{#if exp.receiptImageKey}
+							{#if exp.receiptImageKey || exp.ocrImageKey}
 								<button
 									type="button"
-									onclick={() => (previewImageKey = exp.receiptImageKey)}
+									onclick={() => openReceiptPreview(exp, exp.receiptImageKey && exp.ocrImageKey ? 'compare' : (exp.receiptImageKey ? 'original' : 'ocr'))}
 									title="View receipt slip"
 									aria-label="View receipt slip for {exp.vendorName}"
 									class="text-emerald-600 dark:text-emerald-400 hover:scale-110 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
@@ -344,13 +360,55 @@
 
 						<!-- Details -->
 						<div class="min-w-0 space-y-1">
-							<div class="flex items-center space-x-2">
+							<div class="flex items-center space-x-2 flex-wrap gap-y-1">
 								<p class="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
 									{exp.vendorName}
 								</p>
-								{#if exp.receiptImageKey}
-									<span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-										R2 Voucher
+								{#if exp.receiptImageKey && exp.ocrImageKey}
+									<div class="inline-flex items-center gap-1">
+										<button
+											type="button"
+											onclick={() => openReceiptPreview(exp, 'original')}
+											class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 transition-colors"
+											title="View original photo"
+										>
+											<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+											Original
+										</button>
+										<button
+											type="button"
+											onclick={() => openReceiptPreview(exp, 'ocr')}
+											class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors"
+											title="View enhanced OCR image"
+										>
+											<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+											OCR Scan
+										</button>
+									</div>
+								{:else if exp.receiptImageKey}
+									<button
+										type="button"
+										onclick={() => openReceiptPreview(exp, 'original')}
+										class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-colors"
+										title="View original photo"
+									>
+										<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+										Receipt
+									</button>
+								{:else if exp.ocrImageKey}
+									<button
+										type="button"
+										onclick={() => openReceiptPreview(exp, 'ocr')}
+										class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors"
+										title="View enhanced OCR image"
+									>
+										<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+										OCR Scan
+									</button>
+								{/if}
+								{#if exp.isReimbursable}
+									<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-200 dark:border-amber-800">
+										Reimbursable {exp.reimbursableCompanyName ? `• ${exp.reimbursableCompanyName}` : ''}
 									</span>
 								{/if}
 							</div>
@@ -367,6 +425,16 @@
 								</span>
 								<span>&bull;</span>
 								<span>{formatDateShort(exp.transactionDate)}</span>
+								{#if exp.accountName}
+									<span>&bull;</span>
+									<span class="inline-flex items-center space-x-1 text-slate-600 dark:text-slate-300 font-medium">
+										<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<rect width="20" height="14" x="2" y="5" rx="2"/>
+											<line x1="2" x2="22" y1="10" y2="10"/>
+										</svg>
+										<span>{exp.accountName}</span>
+									</span>
+								{/if}
 							</div>
 
 							{#if exp.notes}
@@ -384,6 +452,22 @@
 						</span>
 
 						<div class="flex items-center space-x-1">
+							<!-- View Receipt Images Button (AC-24) -->
+							{#if exp.receiptImageKey || exp.ocrImageKey}
+								<button
+									type="button"
+									onclick={() => openReceiptPreview(exp, exp.receiptImageKey && exp.ocrImageKey ? 'compare' : (exp.receiptImageKey ? 'original' : 'ocr'))}
+									aria-label="View receipt images for {exp.vendorName}"
+									title={exp.receiptImageKey && exp.ocrImageKey ? "View original & OCR images" : "View receipt image"}
+									class="p-2 rounded-lg text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+										<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+										<circle cx="12" cy="12" r="3"/>
+									</svg>
+								</button>
+							{/if}
+
 							<!-- Edit Button (AC-04) -->
 							<button
 								type="button"
@@ -587,40 +671,182 @@
 	</div>
 {/if}
 
-<!-- Receipt Slip Image Viewer Modal -->
-{#if previewImageKey}
+<!-- Receipt Slip Image Viewer Modal (AC-03, AC-24) -->
+{#if previewExpense}
 	<div
 		class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
 		role="dialog"
 		aria-modal="true"
 		aria-label="Receipt Image Preview"
 		tabindex="-1"
-		onclick={() => (previewImageKey = null)}
+		onclick={closeReceiptPreview}
 		onkeydown={(e) => {
-			if (e.key === 'Escape') previewImageKey = null;
+			if (e.key === 'Escape') closeReceiptPreview();
 		}}
 	>
 		<div
-			class="relative max-w-lg max-h-[85vh] bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl p-2"
+			class="relative {previewImageMode === 'compare' ? 'max-w-4xl' : 'max-w-lg'} w-full max-h-[90vh] bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col transition-all duration-200"
 			onclick={(e) => e.stopPropagation()}
 			role="presentation"
 		>
-			<button
-				type="button"
-				onclick={() => (previewImageKey = null)}
-				class="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-900/70 text-white hover:bg-slate-900 transition-colors"
-				aria-label="Close image preview"
-			>
-				<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<line x1="18" y1="6" x2="6" y2="18"></line>
-					<line x1="6" y1="6" x2="18" y2="18"></line>
-				</svg>
-			</button>
-			<img
-				src={`/api/receipts/${previewImageKey}`}
-				alt="Receipt voucher"
-				class="max-h-[80vh] w-auto object-contain rounded-xl"
-			/>
+			<!-- Top Header: Title, Image Toggle Pills & Close Button -->
+			<div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+				<div class="min-w-0">
+					<h3 class="text-sm font-bold text-slate-900 dark:text-white truncate">
+						{previewExpense.vendorName}
+					</h3>
+					<p class="text-[11px] text-slate-500 font-mono">
+						{centsToZar(previewExpense.amountCents)} &bull; {previewExpense.transactionDate}
+					</p>
+				</div>
+
+				<div class="flex items-center space-x-2 shrink-0">
+					<!-- Toggle Switch if both original and OCR image exist -->
+					{#if previewExpense.receiptImageKey && previewExpense.ocrImageKey}
+						<div class="flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">
+							<button
+								type="button"
+								onclick={() => (previewImageMode = 'original')}
+								class="px-2.5 py-1 rounded-md transition-colors {previewImageMode === 'original'
+									? 'bg-white dark:bg-slate-900 text-[#0B2240] dark:text-white shadow-xs'
+									: 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}"
+							>
+								Original
+							</button>
+							<button
+								type="button"
+								onclick={() => (previewImageMode = 'ocr')}
+								class="px-2.5 py-1 rounded-md transition-colors {previewImageMode === 'ocr'
+									? 'bg-emerald-500 text-white shadow-xs'
+									: 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}"
+							>
+								Filtered OCR
+							</button>
+							<button
+								type="button"
+								onclick={() => (previewImageMode = 'compare')}
+								class="px-2.5 py-1 rounded-md transition-colors {previewImageMode === 'compare'
+									? 'bg-indigo-600 text-white shadow-xs'
+									: 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}"
+							>
+								Side-by-Side
+							</button>
+						</div>
+					{:else if previewExpense.ocrImageKey}
+						<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+							Filtered OCR
+						</span>
+					{:else}
+						<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+							Original Photo
+						</span>
+					{/if}
+
+					<button
+						type="button"
+						onclick={closeReceiptPreview}
+						class="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+						aria-label="Close image preview"
+					>
+						<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<line x1="18" y1="6" x2="6" y2="18"></line>
+							<line x1="6" y1="6" x2="18" y2="18"></line>
+						</svg>
+					</button>
+				</div>
+			</div>
+
+			<!-- Image Display -->
+			<div class="p-3 sm:p-4 overflow-auto flex items-center justify-center bg-slate-950/5 dark:bg-slate-950/40">
+				{#if previewImageMode === 'compare' && previewExpense.receiptImageKey && previewExpense.ocrImageKey}
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+						<!-- Original Column -->
+						<div class="flex flex-col items-center bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-xs">
+							<div class="w-full flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
+								<span class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+									<svg class="w-3.5 h-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+									Original Photo
+								</span>
+								<a
+									href={`/api/receipts/${previewExpense.receiptImageKey}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+								>
+									Full Res &nearr;
+								</a>
+							</div>
+							<img
+								src={`/api/receipts/${previewExpense.receiptImageKey}`}
+								alt="Original receipt voucher for {previewExpense.vendorName}"
+								class="max-h-[60vh] w-auto object-contain rounded-lg border border-slate-200 dark:border-slate-800"
+							/>
+						</div>
+
+						<!-- Filtered OCR Column -->
+						<div class="flex flex-col items-center bg-white dark:bg-slate-900 rounded-xl p-3 border border-slate-200 dark:border-slate-800 shadow-xs">
+							<div class="w-full flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
+								<span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+									<svg class="w-3.5 h-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+									Filtered OCR Scan
+								</span>
+								<a
+									href={`/api/receipts/${previewExpense.ocrImageKey}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+								>
+									Full Res &nearr;
+								</a>
+							</div>
+							<img
+								src={`/api/receipts/${previewExpense.ocrImageKey}`}
+								alt="Preprocessed high-contrast OCR scan for {previewExpense.vendorName}"
+								class="max-h-[60vh] w-auto object-contain rounded-lg border border-slate-200 dark:border-slate-800"
+							/>
+						</div>
+					</div>
+				{:else if previewImageMode === 'ocr' && previewExpense.ocrImageKey}
+					<img
+						src={`/api/receipts/${previewExpense.ocrImageKey}`}
+						alt="Preprocessed high-contrast OCR scan for {previewExpense.vendorName}"
+						class="max-h-[70vh] w-auto object-contain rounded-xl shadow-sm border border-slate-200 dark:border-slate-800"
+					/>
+				{:else if previewExpense.receiptImageKey}
+					<img
+						src={`/api/receipts/${previewExpense.receiptImageKey}`}
+						alt="Original receipt voucher for {previewExpense.vendorName}"
+						class="max-h-[70vh] w-auto object-contain rounded-xl shadow-sm border border-slate-200 dark:border-slate-800"
+					/>
+				{:else}
+					<div class="py-16 text-center text-xs text-slate-400">
+						No image available.
+					</div>
+				{/if}
+			</div>
+
+			<!-- Footer Note -->
+			<div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
+				<span>
+					{#if previewImageMode === 'compare'}
+						Comparing original photo (legal records) and preprocessed scan (AI readability)
+					{:else if previewImageMode === 'ocr'}
+						High-contrast shadow-filtered scan used for AI extraction
+					{:else}
+						Original photo stored for legal accounting records
+					{/if}
+				</span>
+				{#if previewImageMode !== 'compare'}
+					<a
+						href={`/api/receipts/${previewImageMode === 'ocr' && previewExpense.ocrImageKey ? previewExpense.ocrImageKey : previewExpense.receiptImageKey}`}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+					>
+						Open Full Resolution &nearr;
+					</a>
+				{/if}
+			</div>
 		</div>
 	</div>
 {/if}

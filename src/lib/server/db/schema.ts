@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, index } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { user } from './auth.schema';
 
 // Re-export all authentication tables and relations
@@ -30,6 +30,40 @@ export const company = sqliteTable(
 			.notNull()
 	},
 	(table) => [index('company_owner_idx').on(table.ownerUserId)]
+);
+
+/**
+ * Company Member / Collaborator Table
+ * Allows company owners to add registered members to their company.
+ * Members can view and add expenses; canManageCategories controls category & target editing rights.
+ */
+export const companyMember = sqliteTable(
+	'company_member',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		companyId: text('company_id')
+			.notNull()
+			.references(() => company.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		role: text('role').notNull().default('member'),
+		canManageCategories: integer('can_manage_categories', { mode: 'boolean' }).notNull().default(false),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.$onUpdate(() => new Date())
+			.notNull()
+	},
+	(table) => [
+		uniqueIndex('company_member_unique_idx').on(table.companyId, table.userId),
+		index('company_member_user_idx').on(table.userId),
+		index('company_member_company_idx').on(table.companyId)
+	]
 );
 
 /**
@@ -73,6 +107,7 @@ export const paymentAccount = sqliteTable(
 			.notNull()
 			.references(() => company.id, { onDelete: 'cascade' }),
 		name: text('name').notNull(),
+		cardNumber: text('card_number'), // Optional card digits/number for OCR detection & auto-matching
 		isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -109,9 +144,12 @@ export const expense = sqliteTable(
 		vendorName: text('vendor_name').notNull(),
 		amountCents: integer('amount_cents').notNull(), // Integer ZAR cents (e.g. 45280 = R 452.80)
 		transactionDate: text('transaction_date').notNull(), // ISO YYYY-MM-DD in SAST
-		receiptImageKey: text('receipt_image_key'), // Cloudflare R2 Object Key
+		receiptImageKey: text('receipt_image_key'), // Cloudflare R2 Object Key (Original photo)
+		ocrImageKey: text('ocr_image_key'), // Cloudflare R2 Object Key (Filtered/Enhanced OCR image)
 		rawAiExtraction: text('raw_ai_extraction'), // JSON snapshot of Workers AI OCR output
 		notes: text('notes'),
+		isReimbursable: integer('is_reimbursable', { mode: 'boolean' }).notNull().default(false),
+		reimbursableCompanyId: text('reimbursable_company_id').references(() => company.id, { onDelete: 'set null' }),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),
@@ -123,7 +161,8 @@ export const expense = sqliteTable(
 	(table) => [
 		index('idx_expense_company_date').on(table.companyId, table.transactionDate),
 		index('idx_expense_category_date').on(table.categoryId, table.transactionDate),
-		index('idx_expense_user_date').on(table.userId, table.transactionDate)
+		index('idx_expense_user_date').on(table.userId, table.transactionDate),
+		index('idx_expense_reimbursable').on(table.isReimbursable, table.reimbursableCompanyId)
 	]
 );
 
@@ -158,7 +197,19 @@ export const companyRelations = relations(company, ({ one, many }) => ({
 	}),
 	categories: many(category),
 	paymentAccounts: many(paymentAccount),
-	expenses: many(expense)
+	expenses: many(expense),
+	members: many(companyMember)
+}));
+
+export const companyMemberRelations = relations(companyMember, ({ one }) => ({
+	company: one(company, {
+		fields: [companyMember.companyId],
+		references: [company.id]
+	}),
+	user: one(user, {
+		fields: [companyMember.userId],
+		references: [user.id]
+	})
 }));
 
 export const categoryRelations = relations(category, ({ one, many }) => ({
@@ -193,6 +244,10 @@ export const expenseRelations = relations(expense, ({ one }) => ({
 	account: one(paymentAccount, {
 		fields: [expense.accountId],
 		references: [paymentAccount.id]
+	}),
+	reimbursableCompany: one(company, {
+		fields: [expense.reimbursableCompanyId],
+		references: [company.id]
 	})
 }));
 
@@ -200,5 +255,66 @@ export const passwordResetTokenRelations = relations(passwordResetToken, ({ one 
 	user: one(user, {
 		fields: [passwordResetToken.userId],
 		references: [user.id]
+	})
+}));
+
+/**
+ * OCR Accuracy Log Table (AC-23)
+ * Tracks user modifications to AI-extracted receipt fields for longitudinal accuracy auditing.
+ */
+export const ocrAccuracyLog = sqliteTable(
+	'ocr_accuracy_log',
+	{
+		id: text('id')
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		expenseId: text('expense_id').references(() => expense.id, { onDelete: 'cascade' }),
+		companyId: text('company_id')
+			.notNull()
+			.references(() => company.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		status: text('status').notNull(), // 'full_success' | 'partial_fail' | 'total_fail'
+		fieldsChangedCount: integer('fields_changed_count').notNull(), // 0 to 4
+		vendorExtracted: text('vendor_extracted'),
+		vendorFinal: text('vendor_final').notNull(),
+		vendorChanged: integer('vendor_changed', { mode: 'boolean' }).notNull(),
+		amountExtractedCents: integer('amount_extracted_cents'),
+		amountFinalCents: integer('amount_final_cents').notNull(),
+		amountChanged: integer('amount_changed', { mode: 'boolean' }).notNull(),
+		dateExtracted: text('date_extracted'),
+		dateFinal: text('date_final').notNull(),
+		dateChanged: integer('date_changed', { mode: 'boolean' }).notNull(),
+		categoryExtractedId: text('category_extracted_id'),
+		categoryFinalId: text('category_final_id').notNull(),
+		categoryChanged: integer('category_changed', { mode: 'boolean' }).notNull(),
+		rawOcrPayload: text('raw_ocr_payload'),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull()
+	},
+	(table) => [
+		index('idx_ocr_accuracy_company').on(table.companyId, table.createdAt),
+		index('idx_ocr_accuracy_status').on(table.status)
+	]
+);
+
+export const ocrAccuracyLogRelations = relations(ocrAccuracyLog, ({ one }) => ({
+	expense: one(expense, {
+		fields: [ocrAccuracyLog.expenseId],
+		references: [expense.id]
+	}),
+	company: one(company, {
+		fields: [ocrAccuracyLog.companyId],
+		references: [company.id]
+	}),
+	user: one(user, {
+		fields: [ocrAccuracyLog.userId],
+		references: [user.id]
+	}),
+	categoryFinal: one(category, {
+		fields: [ocrAccuracyLog.categoryFinalId],
+		references: [category.id]
 	})
 }));

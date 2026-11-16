@@ -3,6 +3,7 @@ import type { Actions } from './$types';
 import { eq } from 'drizzle-orm';
 import { getDb, user, passwordResetToken } from '$lib/server/db';
 import { sendPasswordResetEmail } from '$lib/server/email';
+import { sha256Hex } from '$lib/server/authz';
 
 export const actions: Actions = {
 	default: async ({ request, platform, url }) => {
@@ -23,10 +24,11 @@ export const actions: Actions = {
 		});
 
 		if (existingUser) {
-			// Generate cryptographically secure reset token
+			// Generate cryptographically secure reset token and store only its SHA-256 hash
 			const tokenBytes = new Uint8Array(32);
 			crypto.getRandomValues(tokenBytes);
 			const token = Array.from(tokenBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+			const tokenHash = await sha256Hex(token);
 
 			// 1-Hour Expiration (AC-11)
 			const oneHourMs = 60 * 60 * 1000;
@@ -35,11 +37,12 @@ export const actions: Actions = {
 			await db.insert(passwordResetToken).values({
 				id: crypto.randomUUID(),
 				userId: existingUser.id,
-				tokenHash: token,
+				tokenHash,
 				expiresAt
 			});
 
-			const resetUrl = `${url.origin}/reset-password?token=${token}`;
+			const canonicalOrigin = platform.env.APP_URL || url.origin;
+			const resetUrl = `${canonicalOrigin.replace(/\/$/, '')}/reset-password?token=${token}`;
 
 			await sendPasswordResetEmail({
 				to: existingUser.email,

@@ -42,6 +42,18 @@ test.describe('Authentication & Session Handling (AC-10, AC-11)', () => {
 		await expect(options).toHaveCount(28);
 	});
 
+	test('register page input placeholders are fully anonymized', async ({ page }) => {
+		await page.goto('/register');
+
+		const nameInput = page.locator('#name');
+		await expect(nameInput).toBeVisible();
+		await expect(nameInput).toHaveAttribute('placeholder', 'John Doe');
+
+		const emailInput = page.locator('#email');
+		await expect(emailInput).toBeVisible();
+		await expect(emailInput).toHaveAttribute('placeholder', 'john.doe@example.com');
+	});
+
 	test('forgot password page accepts email and submits request', async ({ page }) => {
 		await page.goto('/forgot-password');
 

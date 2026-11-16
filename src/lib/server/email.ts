@@ -4,6 +4,8 @@
  * Authority: docs/ARCHITECTURE.md Section 1 & docs/SPECIFICATION.md AC-11
  */
 
+import { escapeHtml } from '$lib/server/authz';
+
 export interface SendResetEmailParams {
 	to: string;
 	recipientName: string;
@@ -40,11 +42,11 @@ export async function sendPasswordResetEmail({
     </div>
     <h1 style="font-size: 20px; font-weight: 700; color: #0F172A; margin: 0 0 16px 0;">Reset your password</h1>
     <p style="font-size: 15px; color: #334155; line-height: 1.6; margin: 0 0 24px 0;">
-      Hi ${recipientName || 'there'},<br><br>
+      Hi ${escapeHtml(recipientName || 'there')},<br><br>
       We received a request to reset your password. Click the button below to choose a new password:
     </p>
     <div style="margin-bottom: 28px;">
-      <a href="${resetUrl}" style="display: inline-block; background-color: #0B2240; color: #FFFFFF; font-weight: 600; font-size: 15px; padding: 12px 24px; border-radius: 6px; text-decoration: none;">
+      <a href="${escapeHtml(resetUrl)}" style="display: inline-block; background-color: #0B2240; color: #FFFFFF; font-weight: 600; font-size: 15px; padding: 12px 24px; border-radius: 6px; text-decoration: none;">
         Reset Password
       </a>
     </div>

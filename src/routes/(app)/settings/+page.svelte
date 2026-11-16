@@ -38,6 +38,49 @@
 	let editCatColor = $state('#0B2240');
 	let isUpdatingCat = $state(false);
 
+	// Member Management State (AC-15)
+	let newMemberEmail = $state('');
+	let newMemberCanManageCategories = $state(false);
+	let isAddingMember = $state(false);
+	let memberError = $state('');
+	let memberSuccess = $state('');
+
+	// Payment Card Management State (AC-20)
+	let showAddCard = $state(false);
+	let newCardName = $state('');
+	let newCardNumber = $state('');
+	let newCardIsDefault = $state(false);
+	let isCreatingCard = $state(false);
+	let cardError = $state('');
+	let cardSuccess = $state('');
+
+	let editingCard: any = $state(null);
+	let editCardName = $state('');
+	let editCardNumber = $state('');
+	let isUpdatingCard = $state(false);
+
+	// OCR Accuracy Metrics State (AC-23)
+	let ocrStatusFilter = $state<'all' | 'full_success' | 'partial_fail' | 'total_fail'>('all');
+	let filteredOcrLogs = $derived(
+		(data.ocrLogs || []).filter((log: any) => {
+			if (ocrStatusFilter === 'all') return true;
+			return log.status === ocrStatusFilter;
+		})
+	);
+
+	function formatLogTimestamp(ts: any): string {
+		if (!ts) return '—';
+		const d = new Date(ts);
+		if (isNaN(d.getTime())) return '—';
+		return d.toLocaleDateString('en-ZA', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
 	const PRESET_COLORS = [
 		'#0B2240', '#10B981', '#0284C7', '#F59E0B', '#8B5CF6', '#EC4899', '#64748B', '#E11D48'
 	];
@@ -241,6 +284,224 @@
 			alert(r?.error || 'Cannot delete this category.');
 		}
 	}
+
+	async function handleAddMember(e: Event) {
+		e.preventDefault();
+		if (!newMemberEmail.trim()) return;
+		isAddingMember = true;
+		memberError = '';
+		memberSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('email', newMemberEmail.trim());
+		form.append('canManageCategories', String(newMemberCanManageCategories));
+
+		try {
+			const res = await fetch('/settings?/addMember', {
+				method: 'POST',
+				body: form
+			});
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				memberSuccess = `Collaborator ${newMemberEmail} added successfully!`;
+				newMemberEmail = '';
+				newMemberCanManageCategories = false;
+				await invalidateAll();
+			} else {
+				memberError = result?.data?.error || 'Failed to add collaborator. Verify that the user has an existing Brickwork account.';
+			}
+		} catch (err: any) {
+			memberError = err?.message || 'Network error.';
+		} finally {
+			isAddingMember = false;
+		}
+	}
+
+	async function handleRemoveMember(memberId: string) {
+		if (!confirm('Are you sure you want to remove this member from the company?')) return;
+		memberError = '';
+		memberSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('memberId', memberId);
+
+		try {
+			const res = await fetch('/settings?/removeMember', {
+				method: 'POST',
+				body: form
+			});
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				memberSuccess = 'Member removed successfully.';
+				await invalidateAll();
+			} else {
+				memberError = result?.data?.error || 'Failed to remove member.';
+			}
+		} catch (err: any) {
+			memberError = err?.message || 'Network error.';
+		}
+	}
+
+	async function handleToggleMemberPermission(memberId: string, currentPermission: boolean) {
+		memberError = '';
+		memberSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('memberId', memberId);
+		form.append('canManageCategories', String(!currentPermission));
+
+		try {
+			const res = await fetch('/settings?/toggleMemberCategoryPermission', {
+				method: 'POST',
+				body: form
+			});
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				await invalidateAll();
+			} else {
+				memberError = result?.data?.error || 'Failed to update member permission.';
+			}
+		} catch (err: any) {
+			memberError = err?.message || 'Network error.';
+		}
+	}
+
+	async function handleCreateCard(e: Event) {
+		e.preventDefault();
+		if (!newCardName.trim()) return;
+		isCreatingCard = true;
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('companyId', data.activeCompany.id);
+		form.append('name', newCardName.trim());
+		form.append('cardNumber', newCardNumber.trim());
+		form.append('isDefault', String(newCardIsDefault));
+
+		try {
+			const res = await fetch('/settings?/createPaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				showAddCard = false;
+				newCardName = '';
+				newCardNumber = '';
+				newCardIsDefault = false;
+				cardSuccess = 'Payment card added successfully!';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to create payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
+		} finally {
+			isCreatingCard = false;
+		}
+	}
+
+	function startEditCard(card: any) {
+		editingCard = card;
+		editCardName = card.name;
+		editCardNumber = card.cardNumber || '';
+		cardError = '';
+		cardSuccess = '';
+	}
+
+	async function handleUpdateCard(e: Event) {
+		e.preventDefault();
+		if (!editingCard || !editCardName.trim()) return;
+		isUpdatingCard = true;
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('id', editingCard.id);
+		form.append('name', editCardName.trim());
+		form.append('cardNumber', editCardNumber.trim());
+
+		try {
+			const res = await fetch('/settings?/updatePaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				editingCard = null;
+				cardSuccess = 'Payment card updated successfully!';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to update payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
+		} finally {
+			isUpdatingCard = false;
+		}
+	}
+
+	async function handleDeleteCard(id: string) {
+		if (data.paymentAccounts.length <= 1) {
+			alert('Cannot delete the only payment card. Every company or personal profile must maintain at least one payment method.');
+			return;
+		}
+
+		if (!confirm('Are you sure you want to delete this payment card?')) return;
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('id', id);
+
+		try {
+			const res = await fetch('/settings?/deletePaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				cardSuccess = 'Payment card removed.';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to delete payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
+		}
+	}
+
+	async function handleSetDefaultCard(id: string) {
+		cardError = '';
+		cardSuccess = '';
+
+		const form = new FormData();
+		form.append('id', id);
+
+		try {
+			const res = await fetch('/settings?/setDefaultPaymentAccount', {
+				method: 'POST',
+				body: form
+			});
+
+			const result = (await res.json().catch(() => null)) as any;
+			if (result?.type === 'success' || res.ok) {
+				cardSuccess = 'Default payment card updated!';
+				await invalidateAll();
+			} else {
+				cardError = result?.data?.error || 'Failed to update default payment card.';
+			}
+		} catch (err: any) {
+			cardError = err?.message || 'Network error.';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -339,6 +600,10 @@
 									<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
 										Personal
 									</span>
+								{:else if !comp.isOwner}
+									<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+										Collaborator
+									</span>
 								{/if}
 								{#if comp.id === data.activeCompany.id}
 									<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
@@ -350,7 +615,7 @@
 					</div>
 
 					<div class="flex items-center space-x-1">
-						{#if !comp.isPersonal}
+						{#if !comp.isPersonal && comp.isOwner}
 							<button
 								type="button"
 								onclick={() => {
@@ -417,14 +682,23 @@
 				</p>
 			</div>
 
-			<button
-				type="button"
-				onclick={() => (showAddCategory = true)}
-				class="btn btn-sm bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold"
-			>
-				+ Add Category
-			</button>
+			{#if data.activeCompany.canManageCategories}
+				<button
+					type="button"
+					onclick={() => (showAddCategory = true)}
+					class="btn btn-sm bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold"
+				>
+					+ Add Category
+				</button>
+			{/if}
 		</div>
+
+		{#if !data.activeCompany.canManageCategories}
+			<div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-800 dark:text-amber-300 flex items-center space-x-2">
+				<svg class="w-4 h-4 shrink-0 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+				<span>View-only: Category & budget target management permission is not granted for your role. Contact the company owner.</span>
+			</div>
+		{/if}
 
 		{#if catError}
 			<div class="alert alert-error text-xs rounded-xl p-3">
@@ -433,7 +707,7 @@
 		{/if}
 
 		<!-- Add Category Form Dialog -->
-		{#if showAddCategory}
+		{#if showAddCategory && data.activeCompany.canManageCategories}
 			<form onsubmit={handleCreateCategory} class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
 				<h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
 					New Category for {data.activeCompany.name}
@@ -512,38 +786,664 @@
 							{centsToZar(cat.monthlyTargetCents)} / mo
 						</span>
 
-						<div class="flex items-center space-x-1">
-							<button
-								type="button"
-								onclick={() => startEditCat(cat)}
-								class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-								aria-label="Edit {cat.name}"
-							>
-								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-									<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-								</svg>
-							</button>
+						{#if data.activeCompany.canManageCategories}
+							<div class="flex items-center space-x-1">
+								<button
+									type="button"
+									onclick={() => startEditCat(cat)}
+									class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+									aria-label="Edit {cat.name}"
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+										<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+									</svg>
+								</button>
 
-							<button
-								type="button"
-								onclick={() => handleDeleteCategory(cat.id)}
-								class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
-								aria-label="Delete {cat.name}"
-							>
-								<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<polyline points="3 6 5 6 21 6"></polyline>
-									<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-								</svg>
-							</button>
-						</div>
+								<button
+									type="button"
+									onclick={() => handleDeleteCategory(cat.id)}
+									class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
+									aria-label="Delete {cat.name}"
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+									</svg>
+								</button>
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/each}
 		</div>
 	</section>
 
-	<!-- 4. User Profile & Sign Out -->
+	<!-- 4. Payment Cards & Accounts (AC-20) -->
+	<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+		<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+			<div>
+				<h2 class="text-base font-bold text-slate-900 dark:text-white">
+					Payment Cards & Accounts ({data.activeCompany.name})
+				</h2>
+				<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+					Manage payment cards and bank accounts for {data.activeCompany.name}. The default card is pre-selected when capturing receipts (AC-20).
+				</p>
+			</div>
+
+			{#if data.activeCompany.isOwner}
+				<button
+					type="button"
+					onclick={() => {
+						showAddCard = !showAddCard;
+						cardError = '';
+						cardSuccess = '';
+					}}
+					class="btn btn-sm bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold"
+				>
+					{showAddCard ? 'Cancel' : '+ Add Card'}
+				</button>
+			{/if}
+		</div>
+
+		{#if !data.activeCompany.isOwner}
+			<div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 flex items-center space-x-2">
+				<svg class="w-4 h-4 shrink-0 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+				<span>View-only: Only the company owner can manage payment cards and accounts.</span>
+			</div>
+		{/if}
+
+		{#if cardError}
+			<div class="alert alert-error text-xs rounded-xl p-3">
+				<span>{cardError}</span>
+			</div>
+		{/if}
+
+		{#if cardSuccess}
+			<div class="alert alert-success text-xs rounded-xl p-3">
+				<span>{cardSuccess}</span>
+			</div>
+		{/if}
+
+		<!-- Add Card Form -->
+		{#if showAddCard && data.activeCompany.isOwner}
+			<form onsubmit={handleCreateCard} class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+				<h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+					Add Payment Card / Account for {data.activeCompany.name}
+				</h3>
+
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+					<div>
+						<label for="new-card-name" class="block text-xs font-semibold mb-1">Card / Account Name</label>
+						<input
+							id="new-card-name"
+							type="text"
+							required
+							bind:value={newCardName}
+							placeholder="e.g. FNB Credit Card, Capitec Debit"
+							class="input input-bordered input-sm w-full h-10 text-xs"
+						/>
+					</div>
+
+					<div>
+						<label for="new-card-number" class="block text-xs font-semibold mb-1">
+							Card Digits / Number <span class="text-slate-400 font-normal">(Optional)</span>
+						</label>
+						<input
+							id="new-card-number"
+							type="text"
+							bind:value={newCardNumber}
+							placeholder="e.g. 5851 or last 4 digits"
+							class="input input-bordered input-sm w-full h-10 text-xs font-mono"
+						/>
+					</div>
+				</div>
+
+				<div class="flex items-center space-x-2 py-1">
+					<input
+						id="new-card-default-toggle"
+						type="checkbox"
+						bind:checked={newCardIsDefault}
+						class="toggle toggle-primary toggle-sm"
+					/>
+					<label for="new-card-default-toggle" class="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+						Set as default card
+					</label>
+				</div>
+
+				<div class="flex items-center justify-end space-x-2 pt-2">
+					<button
+						type="button"
+						onclick={() => (showAddCard = false)}
+						class="btn btn-ghost btn-sm text-xs"
+					>
+						Cancel
+					</button>
+					<button
+						type="submit"
+						disabled={isCreatingCard}
+						class="btn btn-sm bg-[#0B2240] text-white font-bold text-xs"
+					>
+						{#if isCreatingCard}
+							<span class="loading loading-spinner loading-xs"></span>
+						{/if}
+						Save Card
+					</button>
+				</div>
+			</form>
+		{/if}
+
+		<!-- Cards List -->
+		<div class="divide-y divide-slate-100 dark:divide-slate-800">
+			{#if !data.paymentAccounts || data.paymentAccounts.length === 0}
+				<div class="py-4 text-center text-xs text-slate-400">
+					No payment cards configured. Click "+ Add Card" above to add one.
+				</div>
+			{:else}
+				{#each data.paymentAccounts as card (card.id)}
+					<div class="py-3 flex items-center justify-between gap-3">
+						<div class="flex items-center space-x-3">
+							<div class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300 shrink-0 border border-slate-200 dark:border-slate-700">
+								<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<rect width="20" height="14" x="2" y="5" rx="2"/>
+									<line x1="2" x2="22" y1="10" y2="10"/>
+								</svg>
+							</div>
+
+							<div>
+								<div class="flex items-center space-x-2">
+									<span class="text-sm font-bold text-slate-900 dark:text-white">{card.name}</span>
+									{#if card.cardNumber}
+										<span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+											•••• {card.cardNumber.length > 4 ? card.cardNumber.slice(-4) : card.cardNumber}
+										</span>
+									{/if}
+									{#if card.isDefault}
+										<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+											Default
+										</span>
+									{/if}
+								</div>
+							</div>
+						</div>
+
+						<div class="flex items-center space-x-2">
+							{#if data.activeCompany.isOwner}
+								{#if !card.isDefault}
+									<button
+										type="button"
+										onclick={() => handleSetDefaultCard(card.id)}
+										class="btn btn-ghost btn-xs text-[11px] text-slate-600 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 font-semibold"
+										title="Set as primary payment method"
+									>
+										Make Default
+									</button>
+								{/if}
+
+								<button
+									type="button"
+									onclick={() => startEditCard(card)}
+									class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+									aria-label="Edit {card.name}"
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+										<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+									</svg>
+								</button>
+
+								<button
+									type="button"
+									onclick={() => handleDeleteCard(card.id)}
+									disabled={data.paymentAccounts.length <= 1}
+									class="p-1.5 rounded-lg {data.paymentAccounts.length <= 1 ? 'text-slate-200 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600'}"
+									aria-label="Delete {card.name}"
+									title={data.paymentAccounts.length <= 1 ? 'Cannot delete the only card for this entity' : 'Delete payment card'}
+								>
+									<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+									</svg>
+								</button>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			{/if}
+		</div>
+	</section>
+
+	<!-- 5. Team Collaboration & Members (AC-15) -->
+	{#if !data.activeCompany.isPersonal}
+		<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+			<div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+				<div>
+					<h2 class="text-base font-bold text-slate-900 dark:text-white">
+						Company Members & Collaboration ({data.activeCompany.name})
+					</h2>
+					<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+						Add registered team members to capture expenses and view finances for this company (AC-15).
+					</p>
+				</div>
+			</div>
+
+			{#if memberError}
+				<div class="alert alert-error text-xs rounded-xl p-3">
+					<span>{memberError}</span>
+				</div>
+			{/if}
+
+			{#if memberSuccess}
+				<div class="alert alert-success text-xs rounded-xl p-3">
+					<span>{memberSuccess}</span>
+				</div>
+			{/if}
+
+			{#if data.activeCompany.isOwner}
+				<!-- Add Member Form -->
+				<form onsubmit={handleAddMember} class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+					<h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+						Add Collaborator by Email
+					</h3>
+
+					<div class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+						<div class="flex-1 w-full">
+							<input
+								type="email"
+								required
+								bind:value={newMemberEmail}
+								placeholder="colleague@company.co.za"
+								class="input input-bordered input-sm w-full h-10 text-xs"
+							/>
+						</div>
+
+						<div class="flex items-center space-x-2 shrink-0 py-1">
+							<input
+								id="can-manage-cat-toggle"
+								type="checkbox"
+								bind:checked={newMemberCanManageCategories}
+								class="toggle toggle-primary toggle-sm"
+							/>
+							<label for="can-manage-cat-toggle" class="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+								Allow managing categories & targets
+							</label>
+						</div>
+
+						<button
+							type="submit"
+							disabled={isAddingMember}
+							class="btn btn-sm h-10 bg-[#0B2240] text-white hover:bg-[#132f54] text-xs font-bold shrink-0 w-full sm:w-auto px-4"
+						>
+							{#if isAddingMember}
+								<span class="loading loading-spinner loading-xs"></span>
+							{/if}
+							<span>+ Add Member</span>
+						</button>
+					</div>
+					<p class="text-[11px] text-slate-500">Note: The user must already have a registered account on Brickwork.</p>
+				</form>
+			{:else}
+				<div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-600 dark:text-slate-300 flex items-center space-x-2">
+					<svg class="w-4 h-4 shrink-0 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+					<span>You are collaborating on this company as a Member. Only the company owner can add or remove team members.</span>
+				</div>
+			{/if}
+
+			<!-- Members List -->
+			<div class="divide-y divide-slate-100 dark:divide-slate-800">
+				{#if data.members.length === 0}
+					<div class="py-4 text-center text-xs text-slate-400">
+						No external members added yet. Add a colleague using the form above.
+					</div>
+				{:else}
+					{#each data.members as member (member.id)}
+						<div class="py-3 flex items-center justify-between gap-3">
+							<div class="flex items-center space-x-3">
+								<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs uppercase">
+									{member.userName.charAt(0) || 'U'}
+								</div>
+								<div>
+									<div class="flex items-center space-x-2">
+										<span class="text-sm font-bold text-slate-900 dark:text-white">{member.userName}</span>
+										<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+											Member
+										</span>
+									</div>
+									<p class="text-xs text-slate-500">{member.userEmail}</p>
+								</div>
+							</div>
+
+							<div class="flex items-center space-x-3">
+								{#if data.activeCompany.isOwner}
+									<!-- Owner can toggle permission -->
+									<button
+										type="button"
+										onclick={() => handleToggleMemberPermission(member.id, member.canManageCategories)}
+										class="px-2 py-1 rounded text-xs font-semibold flex items-center space-x-1.5 border transition-colors {member.canManageCategories ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:border-emerald-800' : 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:border-slate-700'}"
+										title="Click to toggle category management permission"
+									>
+										<span class="w-2 h-2 rounded-full {member.canManageCategories ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
+										<span>{member.canManageCategories ? 'Can Manage Categories' : 'Read-Only Categories'}</span>
+									</button>
+
+									<button
+										type="button"
+										onclick={() => handleRemoveMember(member.id)}
+										class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600"
+										aria-label="Remove {member.userName}"
+									>
+										<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<polyline points="3 6 5 6 21 6"></polyline>
+											<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+										</svg>
+									</button>
+								{:else}
+									<span class="px-2 py-1 rounded text-xs font-semibold {member.canManageCategories ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50' : 'bg-slate-100 text-slate-600 dark:bg-slate-800'}">
+										{member.canManageCategories ? 'Can Manage Categories' : 'Read-Only Categories'}
+									</span>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				{/if}
+			</div>
+		</section>
+	{/if}
+
+
+	<!-- 6. AI OCR Extraction Accuracy & Audit Metrics (AC-23) -->
+	<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+		<div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 gap-3">
+			<div>
+				<div class="flex items-center space-x-2">
+					<h2 class="text-base font-bold text-slate-900 dark:text-white">
+						AI Receipt OCR Extraction Accuracy
+					</h2>
+					<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+						AC-23
+					</span>
+				</div>
+				<p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+					Audits AI receipt parsing accuracy against your saved expense edits. Full Success indicates all 4 fields (Vendor, Amount, Date, Category) matched your final submission. Partial Fail indicates 1–3 fields were modified, and Total Fail means all 4 fields were changed.
+				</p>
+			</div>
+
+			<!-- Filter tabs -->
+			<div class="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs font-semibold shrink-0">
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'all')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'all'
+						? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+						: 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}"
+				>
+					All ({data.ocrStats?.totalScans ?? 0})
+				</button>
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'full_success')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'full_success'
+						? 'bg-emerald-500 text-white shadow-xs font-bold'
+						: 'text-emerald-700 dark:text-emerald-400 hover:text-emerald-900'}"
+				>
+					Success ({data.ocrStats?.fullSuccessCount ?? 0})
+				</button>
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'partial_fail')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'partial_fail'
+						? 'bg-amber-500 text-white shadow-xs font-bold'
+						: 'text-amber-700 dark:text-amber-400 hover:text-amber-900'}"
+				>
+					Partial ({data.ocrStats?.partialFailCount ?? 0})
+				</button>
+				<button
+					type="button"
+					onclick={() => (ocrStatusFilter = 'total_fail')}
+					class="px-2.5 py-1 rounded-lg transition-all {ocrStatusFilter === 'total_fail'
+						? 'bg-rose-500 text-white shadow-xs font-bold'
+						: 'text-rose-700 dark:text-rose-400 hover:text-rose-900'}"
+				>
+					Fail ({data.ocrStats?.totalFailCount ?? 0})
+				</button>
+			</div>
+		</div>
+
+		<!-- Aggregate Metric Cards -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+			<!-- Total Scans -->
+			<div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 space-y-1">
+				<span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Scans</span>
+				<div class="text-2xl font-black text-slate-900 dark:text-white">
+					{data.ocrStats?.totalScans ?? 0}
+				</div>
+				<p class="text-[10px] text-slate-500">Historical analyzed receipts</p>
+			</div>
+
+			<!-- Full Success Rate -->
+			<div class="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-1">
+				<div class="flex items-center justify-between">
+					<span class="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Full Success</span>
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
+						0 changes
+					</span>
+				</div>
+				<div class="text-2xl font-black text-emerald-700 dark:text-emerald-400">
+					{data.ocrStats?.fullSuccessRate ?? 0}%
+				</div>
+				<p class="text-[10px] text-emerald-600 dark:text-emerald-500">
+					{data.ocrStats?.fullSuccessCount ?? 0} of {data.ocrStats?.totalScans ?? 0} receipts accurate
+				</p>
+			</div>
+
+			<!-- Partial Fail Rate -->
+			<div class="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-1">
+				<div class="flex items-center justify-between">
+					<span class="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Partial Fail</span>
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+						1–3 changes
+					</span>
+				</div>
+				<div class="text-2xl font-black text-amber-700 dark:text-amber-400">
+					{data.ocrStats?.partialFailRate ?? 0}%
+				</div>
+				<p class="text-[10px] text-amber-600 dark:text-amber-500">
+					{data.ocrStats?.partialFailCount ?? 0} of {data.ocrStats?.totalScans ?? 0} required tweaks
+				</p>
+			</div>
+
+			<!-- Total Fail Rate -->
+			<div class="p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 space-y-1">
+				<div class="flex items-center justify-between">
+					<span class="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">Total Fail</span>
+					<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200">
+						4 changes
+					</span>
+				</div>
+				<div class="text-2xl font-black text-rose-700 dark:text-rose-400">
+					{data.ocrStats?.totalFailRate ?? 0}%
+				</div>
+				<p class="text-[10px] text-rose-600 dark:text-rose-500">
+					{data.ocrStats?.totalFailCount ?? 0} of {data.ocrStats?.totalScans ?? 0} all fields changed
+				</p>
+			</div>
+		</div>
+
+		<!-- Field-by-Field Accuracy Rates -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Vendor:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.vendorAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.vendorAccuracyRate ?? 0}%
+				</span>
+			</div>
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Amount:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.amountAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.amountAccuracyRate ?? 0}%
+				</span>
+			</div>
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Date:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.dateAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.dateAccuracyRate ?? 0}%
+				</span>
+			</div>
+			<div class="flex items-center justify-between px-2">
+				<span class="text-xs font-semibold text-slate-600 dark:text-slate-400">Category:</span>
+				<span class="text-xs font-bold font-mono {(data.ocrStats?.categoryAccuracyRate ?? 0) >= 80 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">
+					{data.ocrStats?.categoryAccuracyRate ?? 0}%
+				</span>
+			</div>
+		</div>
+
+		<!-- Historical Audit Log Table -->
+		<div class="space-y-2">
+			<div class="flex items-center justify-between">
+				<h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+					Extraction Audit History ({filteredOcrLogs.length} scans)
+				</h3>
+				<span class="text-[11px] text-slate-400 hidden sm:inline">
+					Strike-through indicates fields user modified
+				</span>
+			</div>
+
+			<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+				<table class="w-full text-left text-xs">
+					<thead class="bg-slate-100/80 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+						<tr>
+							<th class="py-3 px-3.5 whitespace-nowrap">Scanned</th>
+							<th class="py-3 px-3 whitespace-nowrap">Result</th>
+							<th class="py-3 px-3">Vendor</th>
+							<th class="py-3 px-3">Amount</th>
+							<th class="py-3 px-3">Date</th>
+							<th class="py-3 px-3">Category</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+						{#if filteredOcrLogs.length === 0}
+							<tr>
+								<td colspan="6" class="py-8 text-center text-slate-400">
+									{#if data.ocrLogs?.length === 0}
+										No receipt scans recorded yet for {data.activeCompany.name}. Capture a receipt to populate accuracy metrics.
+									{:else}
+										No receipts found for filter "{ocrStatusFilter}".
+									{/if}
+								</td>
+							</tr>
+						{:else}
+							{#each filteredOcrLogs as log (log.id)}
+								<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+									<!-- Timestamp -->
+									<td class="py-3 px-3.5 whitespace-nowrap text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+										{formatLogTimestamp(log.createdAt)}
+									</td>
+
+									<!-- Status Badge -->
+									<td class="py-3 px-3 whitespace-nowrap">
+										{#if log.status === 'full_success'}
+											<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+												<svg class="w-3 h-3 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+												Full Success (0/4)
+											</span>
+										{:else if log.status === 'partial_fail'}
+											<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+												<svg class="w-3 h-3 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+												Partial Fail ({log.fieldsChangedCount}/4)
+											</span>
+										{:else}
+											<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+												<svg class="w-3 h-3 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+												Total Fail (4/4)
+											</span>
+										{/if}
+									</td>
+
+									<!-- Vendor Name -->
+									<td class="py-3 px-3 max-w-[170px]">
+										{#if log.vendorChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through truncate" title="AI Extracted: {log.vendorExtracted || 'Unknown'}">
+													{log.vendorExtracted || 'Unknown'}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 truncate flex items-center gap-1" title="Saved: {log.vendorFinal}">
+													<span class="text-slate-400 font-normal">→</span> {log.vendorFinal}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 truncate" title="{log.vendorFinal}">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span class="truncate">{log.vendorFinal}</span>
+											</div>
+										{/if}
+									</td>
+
+									<!-- Amount -->
+									<td class="py-3 px-3 whitespace-nowrap font-mono">
+										{#if log.amountChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through">
+													{centsToZar(log.amountExtractedCents ?? 0)}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+													<span class="text-slate-400 font-normal">→</span> {centsToZar(log.amountFinalCents)}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span>{centsToZar(log.amountFinalCents)}</span>
+											</div>
+										{/if}
+									</td>
+
+									<!-- Date -->
+									<td class="py-3 px-3 whitespace-nowrap font-mono">
+										{#if log.dateChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through">
+													{log.dateExtracted || 'None'}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+													<span class="text-slate-400 font-normal">→</span> {log.dateFinal}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span>{log.dateFinal}</span>
+											</div>
+										{/if}
+									</td>
+
+									<!-- Category -->
+									<td class="py-3 px-3 max-w-[160px]">
+										{#if log.categoryChanged}
+											<div class="space-y-0.5">
+												<div class="text-[10px] text-slate-400 line-through truncate" title="AI Extracted: {log.categoryExtractedName}">
+													{log.categoryExtractedName}
+												</div>
+												<div class="font-bold text-amber-700 dark:text-amber-400 truncate flex items-center gap-1" title="Saved: {log.categoryFinalName}">
+													<span class="text-slate-400 font-normal">→</span> {log.categoryFinalName}
+												</div>
+											</div>
+										{:else}
+											<div class="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 truncate" title="{log.categoryFinalName}">
+												<svg class="w-3 h-3 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+												<span class="truncate">{log.categoryFinalName}</span>
+											</div>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</section>
+
+	<!-- 7. User Profile & Sign Out -->
 	<section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
 		<div class="border-b border-slate-100 dark:border-slate-800 pb-3">
 			<h2 class="text-base font-bold text-slate-900 dark:text-white">
@@ -677,6 +1577,65 @@
 					<PrimaryActionButton
 						type="submit"
 						loading={isUpdatingCompany}
+						variant="primary"
+						class="btn-sm"
+					>
+						Save
+					</PrimaryActionButton>
+				</div>
+			</form>
+		</div>
+	</div>
+{/if}
+
+<!-- Edit Payment Card Modal -->
+{#if editingCard}
+	<div
+		class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div class="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+			<h3 class="text-base font-bold text-slate-900 dark:text-white">
+				Rename Payment Card
+			</h3>
+
+			<form onsubmit={handleUpdateCard} class="space-y-4">
+				<div>
+					<label for="edit-card-name" class="block text-xs font-semibold mb-1">Card / Account Name</label>
+					<input
+						id="edit-card-name"
+						type="text"
+						required
+						bind:value={editCardName}
+						class="input input-bordered w-full h-11 text-sm bg-slate-50 dark:bg-slate-800 font-semibold"
+					/>
+				</div>
+
+				<div>
+					<label for="edit-card-number" class="block text-xs font-semibold mb-1">
+						Card Digits / Number <span class="text-slate-400 font-normal">(Optional)</span>
+					</label>
+					<input
+						id="edit-card-number"
+						type="text"
+						bind:value={editCardNumber}
+						placeholder="e.g. 5851 or last 4 digits"
+						class="input input-bordered w-full h-11 text-sm bg-slate-50 dark:bg-slate-800 font-mono"
+					/>
+				</div>
+
+				<div class="pt-2 flex items-center justify-end space-x-3">
+					<button
+						type="button"
+						onclick={() => (editingCard = null)}
+						class="btn btn-ghost btn-sm"
+					>
+						Cancel
+					</button>
+					<PrimaryActionButton
+						type="submit"
+						loading={isUpdatingCard}
 						variant="primary"
 						class="btn-sm"
 					>

@@ -46,7 +46,7 @@
 				required
 				value={form?.name || ''}
 				class="input input-bordered w-full h-12 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-base"
-				placeholder="Stefan van Dyk"
+				placeholder="John Doe"
 			/>
 		</div>
 
@@ -62,7 +62,7 @@
 				required
 				value={form?.email || ''}
 				class="input input-bordered w-full h-12 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-base"
-				placeholder="stefan@mycompany.co.za"
+				placeholder="john.doe@example.com"
 			/>
 		</div>
 

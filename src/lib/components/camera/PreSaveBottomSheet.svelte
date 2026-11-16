@@ -21,6 +21,8 @@
 		categories: CategoryOption[];
 		paymentAccounts: AccountOption[];
 		isSaving?: boolean;
+		isPersonal?: boolean;
+		businessCompanies?: Array<{ id: string; name: string }>;
 		onsave: (expense: {
 			vendorName: string;
 			amountCents: number;
@@ -28,6 +30,8 @@
 			categoryId: string;
 			accountId?: string;
 			notes?: string;
+			isReimbursable?: boolean;
+			reimbursableCompanyId?: string;
 		}) => void;
 		oncancel: () => void;
 	}
@@ -38,6 +42,8 @@
 		categories = [],
 		paymentAccounts = [],
 		isSaving = false,
+		isPersonal = false,
+		businessCompanies = [],
 		onsave,
 		oncancel
 	}: Props = $props();
@@ -49,13 +55,19 @@
 	let categoryId = $state('');
 	let accountId = $state('');
 	let notes = $state('');
+	let isReimbursable = $state(false);
+	let reimbursableCompanyId = $state('');
+	let isEnlarged = $state(false);
 
 	$effect(() => {
 		vendorName = extractedData.vendorName || '';
 		amountCents = extractedData.amountCents || 0;
 		transactionDate = extractedData.transactionDate || new Date().toISOString().split('T')[0];
 		categoryId = extractedData.suggestedCategoryId || categories[0]?.id || '';
-		accountId = paymentAccounts.find((a) => a.isDefault)?.id || paymentAccounts[0]?.id || '';
+		accountId = extractedData.suggestedAccountId || paymentAccounts.find((a) => a.isDefault)?.id || paymentAccounts[0]?.id || '';
+		if (businessCompanies.length > 0 && !reimbursableCompanyId) {
+			reimbursableCompanyId = businessCompanies[0].id;
+		}
 	});
 
 	// Validation
@@ -83,7 +95,9 @@
 			transactionDate,
 			categoryId,
 			accountId: accountId || undefined,
-			notes: notes.trim() || undefined
+			notes: notes.trim() || undefined,
+			isReimbursable: isPersonal ? isReimbursable : false,
+			reimbursableCompanyId: isPersonal && isReimbursable ? reimbursableCompanyId : undefined
 		});
 	}
 </script>
@@ -134,17 +148,33 @@
 			<!-- Receipt Image Thumbnail & AI Confidence -->
 			{#if previewUrl}
 				<div class="flex items-center space-x-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
-					<img
-						src={previewUrl}
-						alt="Captured receipt thumbnail"
-						class="w-14 h-18 object-cover rounded-lg border border-slate-300 dark:border-slate-600 shadow-sm shrink-0"
-					/>
-					<div class="text-xs space-y-1">
-						<span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-							AI Confidence: {Math.round((extractedData.confidence || 0.8) * 100)}%
+					<button
+						type="button"
+						onclick={() => (isEnlarged = true)}
+						class="relative group rounded-lg overflow-hidden shrink-0 border border-slate-300 dark:border-slate-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+						title="Tap to preview full receipt"
+						aria-label="Enlarge captured receipt preview"
+					>
+						<img
+							src={previewUrl}
+							alt="Captured receipt thumbnail"
+							class="w-14 h-18 object-cover transition-transform group-hover:scale-105"
+						/>
+						<span class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-bold">
+							Zoom
 						</span>
+					</button>
+					<div class="text-xs space-y-1">
+						<div class="flex items-center gap-1.5 flex-wrap">
+							<span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+								AI Confidence: {Math.round((extractedData.confidence || 0.8) * 100)}%
+							</span>
+							<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
+								📐 Perspective Dewarped
+							</span>
+						</div>
 						<p class="text-slate-500 dark:text-slate-400">
-							Receipt voucher will be stored in private R2 bucket.
+							Tap thumbnail to inspect full receipt. Stored in R2 bucket.
 						</p>
 					</div>
 				</div>
@@ -218,9 +248,17 @@
 
 				{#if paymentAccounts.length > 0}
 					<div>
-						<label for="review-account" class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
-							Paid With
-						</label>
+						<div class="flex items-center justify-between mb-1">
+							<label for="review-account" class="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+								Paid With
+							</label>
+							{#if extractedData.suggestedAccountId && accountId === extractedData.suggestedAccountId}
+								<span class="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800 flex items-center space-x-1">
+									<svg class="w-3 h-3 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+									<span>Auto-matched from slip</span>
+								</span>
+							{/if}
+						</div>
 						<select
 							id="review-account"
 							bind:value={accountId}
@@ -250,6 +288,42 @@
 				/>
 			</div>
 
+			<!-- Reimbursable Section (AC-16) -->
+			{#if isPersonal && businessCompanies.length > 0}
+				<div class="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 space-y-3">
+					<div class="flex items-center justify-between">
+						<div>
+							<span class="text-sm font-bold text-slate-900 dark:text-white">Reimbursable Expense</span>
+							<p class="text-xs text-slate-500 dark:text-slate-400">Claim back this personal out-of-pocket expense from a business entity.</p>
+						</div>
+						<input
+							type="checkbox"
+							id="review-reimbursable"
+							bind:checked={isReimbursable}
+							class="toggle toggle-warning"
+						/>
+					</div>
+
+					{#if isReimbursable}
+						<div>
+							<label for="review-reimbursable-company" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+								Reimburse from Company <span class="text-rose-500">*</span>
+							</label>
+							<select
+								id="review-reimbursable-company"
+								bind:value={reimbursableCompanyId}
+								required={isReimbursable}
+								class="select select-bordered select-sm w-full h-10 text-xs bg-white dark:bg-slate-800"
+							>
+								{#each businessCompanies as bComp}
+									<option value={bComp.id}>{bComp.name}</option>
+								{/each}
+							</select>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- Action Buttons -->
 			<div class="pt-4 flex flex-col sm:flex-row items-center gap-3">
 				<PrimaryActionButton
@@ -272,4 +346,34 @@
 			</div>
 		</form>
 	</div>
+
+	<!-- Receipt Lightbox Zoom Modal (AC-02) -->
+	{#if isEnlarged && previewUrl}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-150"
+			onclick={() => (isEnlarged = false)}
+		>
+			<div class="relative max-w-lg max-h-[90vh] w-full flex flex-col items-center">
+				<button
+					type="button"
+					onclick={() => (isEnlarged = false)}
+					class="self-end mb-2 p-2 rounded-full bg-slate-800 text-white hover:bg-slate-700 shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"
+					aria-label="Close enlarged receipt preview"
+				>
+					<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<line x1="18" y1="6" x2="6" y2="18"></line>
+						<line x1="6" y1="6" x2="18" y2="18"></line>
+					</svg>
+				</button>
+				<img
+					src={previewUrl}
+					alt="Full captured receipt"
+					class="max-w-full max-h-[78vh] object-contain rounded-xl shadow-2xl border border-slate-700"
+				/>
+				<span class="text-xs text-slate-300 mt-2 font-medium">Tap anywhere to close zoom</span>
+			</div>
+		</div>
+	{/if}
 </div>

@@ -79,22 +79,38 @@ Fixed Bottom App Bar with persistent tabs:
 ```
 
 - **Company Switcher**: Prominent top dropdown allowing instant switching between Personal and any registered company.
-- **Cycle Indicator**: Explains the exact date window being aggregated according to user's `month_start_day`.
-- **Category Progress Bars**: Tap any category to jump into a filtered history list for that category.
+- **Date Range Filter (AC-17)**: A compact filter trigger located in the top-left of the Active Cycle summary card. 
+  - In default mode: Displays neutral styling `[ 🔍 Filter Dates ]`.
+  - When custom dates are active: Displays a prominent warning color (`btn-warning` / amber `[ ⚠ Custom Dates: DD MMM – DD MMM ]`) with quick reset to billing cycle.
+- **Budget Utilization Donut Chart (AC-18)**: Replaces the 3 separate numeric blocks with an SVG Donut/Pie chart that visually contrasts Cycle Spend and Remaining Budget against the Monthly Target. Reduces vertical footprint while delivering high-density comparative insights.
+- **Category Progress Bars**: Category budgets section with color-coded progress bars and percentage status.
+- **Recent Transactions**: Real-time list of latest transactions with receipt thumbnail badges.
 
 ---
 
-### 4.2 Camera Capture & Pre-Save Review (`/capture`)
+### 4.2 Camera Capture & Receipt File Upload (`/capture`)
 
-#### Step 1: Live Viewfinder
+`/capture` offers dual capture modes to accommodate both physical receipts and digital/email receipts:
+
+#### Mode Switcher:
+- **[ 📷 Camera ]**: Live viewfinder stream for physical point-of-purchase slips.
+- **[ 📁 Upload File ]**: Dedicated dropzone and file selector for digital invoices and receipts received via email.
+- **[ ✍ Enter Manually ]**: Manual fallback modal without image requirement.
+
+#### Step 1A: Live Camera Viewfinder
 - Fullscreen camera stream via HTML5 `MediaDevices`.
 - Alignment frame guide for till slip positioning.
-- Shutter button with audio/haptic click feedback.
-- Alternative file picker button ("Choose from gallery / files").
+- Shutter button with tactile feedback.
+
+#### Step 1B: Dedicated File Upload Dropzone (AC-19)
+- Drag-and-drop zone supporting images (`.png`, `.jpg`, `.jpeg`, `.webp`).
+- Direct file picker without forced mobile camera constraints (`capture="environment"` disabled for file uploads).
+- Clear instruction for email receipts: *"Drop email receipt screenshots or invoices here"*.
 
 #### Step 2: AI Processing State (<2.0s)
-- Translucent backdrop showing captured still.
+- Translucent backdrop showing captured or uploaded still.
 - Pulse loader: *"Extracting vendor, amount and category via Cloudflare AI..."*
+
 
 #### Step 3: Pre-Save Review Bottom Sheet
 ```text
@@ -121,12 +137,18 @@ Fixed Bottom App Bar with persistent tabs:
 │  Payment Account*                            │
 │  [ FNB Business Cheque (Default)           ▼]│
 │                                              │
+│  (If Entity is Personal):                    │
+│  [x] Reimbursable Expense                    │
+│  Reimburse from Company:                     │
+│  [ Apex Consulting (Pty) Ltd               ▼]│
+│                                              │
 │  [ ✅ Save Expense ]    [ ❌ Retake / Discard ]│
 └──────────────────────────────────────────────┘
 ```
 - Every field is editable before saving.
 - Category defaults to the AI prediction but can be changed with one tap.
 - Payment account automatically defaults to the selected company's default account.
+- **Personal Reimbursable Toggle**: Only visible when active profile is Personal. Allows designating which business entity owes reimbursement for personal out-of-pocket expenses.
 - Clicking **Save Expense** uploads image to Cloudflare R2 and commits the expense record to D1.
 
 ---
@@ -142,6 +164,7 @@ Fixed Bottom App Bar with persistent tabs:
 - **Expense Card**:
   - Vendor name & transaction date.
   - Payment account name & Category badge.
+  - **Reimbursable Badge**: If `is_reimbursable`, displays a prominent pill badge: `Reimbursable • [Company Name]` (with amber/emerald tint).
   - ZAR amount in bold.
   - Receipt thumbnail badge (tap to view full image in modal).
   - Quick action menu: Edit & Delete.
@@ -165,11 +188,24 @@ Fixed Bottom App Bar with persistent tabs:
 
 ---
 
-### 4.5 User Settings (`/settings`)
+### 4.5 User Settings & Company Collaboration (`/settings`)
 
 - **User Profile**: Name, email, role badge (`Main Member`).
 - **Month Cycle Start Day**: Numerical selector constrained between `1` and `28` (with preview explanation, e.g., *"Your month cycle runs from the 15th to the 14th of each month"*).
-- **Default Company**: Dropdown to set which company loads automatically on login/dashboard.
+- **Payment Cards & Accounts Management (AC-20)**:
+  - Accessible for both **Personal** profiles and any **Business** entity selected in the top company switcher.
+  - **Cards Ledger**: Lists all cards and payment methods linked to the active entity with card icon and `Default` badge.
+  - **Make Default**: One-click action to switch the default payment card for that company.
+  - **Add Card Form**: Input for card/account name (e.g. *"FNB Credit Card"*, *"Standard Bank Corporate Cheque"*) with optional *"Set as default"* toggle.
+  - **Edit & Delete**: Rename existing cards or delete non-primary cards (prevents deleting the last remaining card to ensure a valid default exists).
+- **Company Collaboration & Members**:
+  - For company owners:
+    - Add collaborator by email.
+    - Permission toggle: *"Allow member to manage categories & spend targets"*.
+    - Collaborator list displaying member name, email, permissions badge, and `Remove` action button.
+  - For invited members:
+    - Member list is view-only.
+    - Category & spend target modification is restricted unless the owner enabled the category management permission toggle. If restricted, a clear banner indicates: *"View-only: Category management permission not granted by company owner."*
 - **Password Reset**: Option to trigger a password reset email to registered address.
 - **Sign Out**: Clears session cookie and redirects to `/auth/login`.
 
@@ -177,7 +213,14 @@ Fixed Bottom App Bar with persistent tabs:
 
 ### 4.6 Authentication Flows (`/auth/*`)
 
-- `/auth/register`: Public registration for Main Member (Name, Email, Password). Auto-seeds personal company and defaults upon submission.
+- `/auth/register`: Public registration for Main Member (Name, Email, Password, Month Cycle Start Day). Auto-seeds personal company and defaults upon submission.
+  - Form input placeholders must strictly use anonymized dummy data:
+    - **Full Name**: `"John Doe"`
+    - **Email address**: `"john.doe@example.com"`
+    - **Password**: `"At least 8 characters"`
 - `/auth/login`: Email & Password credentials.
+  - **Email address**: `"name@company.co.za"`
+  - **Password**: `"••••••••"`
 - `/auth/forgot-password`: Email submission form triggering Cloudflare Email Send.
+  - **Email address**: `"name@company.co.za"`
 - `/auth/reset-password?token=...`: New password form validated against cryptographic token expiry.

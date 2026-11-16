@@ -1,9 +1,41 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { getDb } from '$lib/server/db';
-import { user as userTable, company as companyTable, category as categoryTable, expense as expenseTable } from '$lib/server/db/schema';
+import {
+	user as userTable,
+	company as companyTable,
+	category as categoryTable,
+	expense as expenseTable,
+	companyMember as companyMemberTable,
+	paymentAccount as paymentAccountTable,
+	ocrAccuracyLog as ocrAccuracyLogTable
+} from '$lib/server/db/schema';
 import { seedBusinessCompany } from '$lib/server/db/seed';
-import { eq, and } from 'drizzle-orm';
+import { deleteReceiptsFromR2 } from '$lib/server/storage';
+import { eq, and, asc, desc, sql } from 'drizzle-orm';
+
+async function checkCanManageCategories(db: ReturnType<typeof getDb>, companyId: string, userId: string): Promise<boolean> {
+	const [comp] = await db
+		.select()
+		.from(companyTable)
+		.where(eq(companyTable.id, companyId))
+		.limit(1);
+	if (comp && comp.ownerUserId === userId) {
+		return true;
+	}
+	const [membership] = await db
+		.select()
+		.from(companyMemberTable)
+		.where(
+			and(
+				eq(companyMemberTable.companyId, companyId),
+				eq(companyMemberTable.userId, userId),
+				eq(companyMemberTable.canManageCategories, true)
+			)
+		)
+		.limit(1);
+	return Boolean(membership);
+}
 
 export const load: PageServerLoad = async ({ parent, platform }) => {
 	const { user, companies, activeCompany } = await parent();
@@ -13,7 +45,23 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 			user,
 			companies,
 			activeCompany,
-			categories: []
+			categories: [],
+			members: [],
+			paymentAccounts: [],
+			ocrLogs: [],
+			ocrStats: {
+				totalScans: 0,
+				fullSuccessCount: 0,
+				fullSuccessRate: 0,
+				partialFailCount: 0,
+				partialFailRate: 0,
+				totalFailCount: 0,
+				totalFailRate: 0,
+				vendorAccuracyRate: 0,
+				amountAccuracyRate: 0,
+				dateAccuracyRate: 0,
+				categoryAccuracyRate: 0
+			}
 		};
 	}
 
@@ -23,11 +71,115 @@ export const load: PageServerLoad = async ({ parent, platform }) => {
 		.from(categoryTable)
 		.where(eq(categoryTable.companyId, activeCompany.id));
 
+	let members: Array<{
+		id: string;
+		userId: string;
+		role: string;
+		canManageCategories: boolean;
+		userName: string;
+		userEmail: string;
+	}> = [];
+
+	if (!activeCompany.isPersonal) {
+		const memberRows = await db
+			.select({
+				id: companyMemberTable.id,
+				userId: companyMemberTable.userId,
+				role: companyMemberTable.role,
+				canManageCategories: companyMemberTable.canManageCategories,
+				userName: userTable.name,
+				userEmail: userTable.email
+			})
+			.from(companyMemberTable)
+			.innerJoin(userTable, eq(companyMemberTable.userId, userTable.id))
+			.where(eq(companyMemberTable.companyId, activeCompany.id));
+
+		members = memberRows.map((m) => ({
+			...m,
+			canManageCategories: Boolean(m.canManageCategories)
+		}));
+	}
+
+	const paymentAccounts = await db
+		.select()
+		.from(paymentAccountTable)
+		.where(eq(paymentAccountTable.companyId, activeCompany.id))
+		.orderBy(desc(paymentAccountTable.isDefault), asc(paymentAccountTable.createdAt));
+
+	// Calculate overall accuracy statistics across all company scans via SQL aggregation
+	const [statsRow] = await db
+		.select({
+			totalScans: sql<number>`count(*)`,
+			fullSuccessCount: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.status} = 'full_success' then 1 else 0 end), 0)`,
+			partialFailCount: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.status} = 'partial_fail' then 1 else 0 end), 0)`,
+			totalFailCount: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.status} = 'total_fail' then 1 else 0 end), 0)`,
+			vendorCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.vendorChanged} = 0 then 1 else 0 end), 0)`,
+			amountCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.amountChanged} = 0 then 1 else 0 end), 0)`,
+			dateCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.dateChanged} = 0 then 1 else 0 end), 0)`,
+			categoryCorrect: sql<number>`coalesce(sum(case when ${ocrAccuracyLogTable.categoryChanged} = 0 then 1 else 0 end), 0)`
+		})
+		.from(ocrAccuracyLogTable)
+		.where(eq(ocrAccuracyLogTable.companyId, activeCompany.id));
+
+	const totalScans = Number(statsRow?.totalScans ?? 0);
+	const fullSuccessCount = Number(statsRow?.fullSuccessCount ?? 0);
+	const partialFailCount = Number(statsRow?.partialFailCount ?? 0);
+	const totalFailCount = Number(statsRow?.totalFailCount ?? 0);
+	const pct = (n: number) => (totalScans > 0 ? Math.round((n / totalScans) * 100) : 0);
+
+	const ocrStats = {
+		totalScans,
+		fullSuccessCount,
+		fullSuccessRate: pct(fullSuccessCount),
+		partialFailCount,
+		partialFailRate: pct(partialFailCount),
+		totalFailCount,
+		totalFailRate: pct(totalFailCount),
+		vendorAccuracyRate: pct(Number(statsRow?.vendorCorrect ?? 0)),
+		amountAccuracyRate: pct(Number(statsRow?.amountCorrect ?? 0)),
+		dateAccuracyRate: pct(Number(statsRow?.dateCorrect ?? 0)),
+		categoryAccuracyRate: pct(Number(statsRow?.categoryCorrect ?? 0))
+	};
+
+	// Load recent 50 scans for the audit breakdown table
+	const ocrLogsRaw = await db
+		.select()
+		.from(ocrAccuracyLogTable)
+		.where(eq(ocrAccuracyLogTable.companyId, activeCompany.id))
+		.orderBy(desc(ocrAccuracyLogTable.createdAt))
+		.limit(50);
+
+	const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+
+	const ocrLogs = ocrLogsRaw.map((log) => {
+		let categoryExtractedName = 'None';
+		if (log.categoryExtractedId) {
+			categoryExtractedName = categoryMap.get(log.categoryExtractedId) || 'Unknown Category';
+		} else if (log.rawOcrPayload) {
+			try {
+				const parsed = JSON.parse(log.rawOcrPayload);
+				if (parsed.suggestedCategory && typeof parsed.suggestedCategory === 'string') {
+					categoryExtractedName = parsed.suggestedCategory;
+				}
+			} catch {}
+		}
+
+		return {
+			...log,
+			categoryExtractedName,
+			categoryFinalName: categoryMap.get(log.categoryFinalId) || 'Unknown Category'
+		};
+	});
+
 	return {
 		user,
 		companies,
 		activeCompany,
-		categories
+		categories,
+		members,
+		paymentAccounts,
+		ocrLogs,
+		ocrStats
 	};
 };
 
@@ -139,13 +291,179 @@ export const actions: Actions = {
 				return fail(400, { error: 'The default Personal profile cannot be deleted.' });
 			}
 
+			// Collect all R2 receipt keys before cascading company deletion in D1
+			const companyReceipts = await db
+				.select({
+					receiptImageKey: expenseTable.receiptImageKey,
+					ocrImageKey: expenseTable.ocrImageKey
+				})
+				.from(expenseTable)
+				.where(eq(expenseTable.companyId, companyId));
+
 			await db.delete(companyTable).where(eq(companyTable.id, companyId));
+
+			const keysToDelete = companyReceipts
+				.flatMap((r) => [r.receiptImageKey, r.ocrImageKey])
+				.filter((k): k is string => Boolean(k));
+			if (keysToDelete.length > 0 && platform?.env?.RECEIPTS_BUCKET) {
+				await deleteReceiptsFromR2(platform.env.RECEIPTS_BUCKET, keysToDelete);
+			}
 
 			// If current active company was deleted, clear cookie
 			if (cookies.get('brickwork_active_company') === companyId) {
 				cookies.delete('brickwork_active_company', { path: '/' });
 			}
 		}
+
+		return { success: true };
+	},
+
+	addMember: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const companyId = String(data.get('companyId') || '');
+		const email = String(data.get('email') || '').trim().toLowerCase();
+		const canManageCategories = data.get('canManageCategories') === 'on' || data.get('canManageCategories') === 'true';
+
+		if (!companyId || !email) {
+			return fail(400, { error: 'Company and collaborator email are required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the company owner can add collaborators.' });
+		}
+
+		if (comp.isPersonal) {
+			return fail(400, { error: 'Cannot add collaborators to a Personal profile.' });
+		}
+
+		// Look up registered user by email
+		const [targetUser] = await db
+			.select()
+			.from(userTable)
+			.where(eq(userTable.email, email))
+			.limit(1);
+
+		if (!targetUser) {
+			return fail(404, {
+				error: `No registered user found with email "${email}". Please ensure they have registered on Brickwork first.`
+			});
+		}
+
+		if (targetUser.id === locals.user.id) {
+			return fail(400, { error: 'You are already the owner of this company.' });
+		}
+
+		// Check if already member
+		const [existingMember] = await db
+			.select()
+			.from(companyMemberTable)
+			.where(and(eq(companyMemberTable.companyId, companyId), eq(companyMemberTable.userId, targetUser.id)))
+			.limit(1);
+
+		if (existingMember) {
+			return fail(400, { error: `User ${email} is already a collaborator on this company.` });
+		}
+
+		await db.insert(companyMemberTable).values({
+			id: crypto.randomUUID(),
+			companyId,
+			userId: targetUser.id,
+			role: 'member',
+			canManageCategories
+		});
+
+		return { success: true, memberAdded: true };
+	},
+
+	removeMember: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const memberId = String(data.get('memberId') || '');
+		const companyId = String(data.get('companyId') || '');
+
+		if (!memberId || !companyId) {
+			return fail(400, { error: 'Member ID and Company ID required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be company owner
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the company owner can remove members.' });
+		}
+
+		await db
+			.delete(companyMemberTable)
+			.where(and(eq(companyMemberTable.id, memberId), eq(companyMemberTable.companyId, companyId)));
+
+		return { success: true, memberRemoved: true };
+	},
+
+	toggleMemberCategoryPermission: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const memberId = String(data.get('memberId') || '');
+		const companyId = String(data.get('companyId') || '');
+		const canManageCategories = data.get('canManageCategories') === 'true' || data.get('canManageCategories') === 'on';
+
+		if (!memberId || !companyId) {
+			return fail(400, { error: 'Member ID and Company ID required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be company owner
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the company owner can adjust permissions.' });
+		}
+
+		await db
+			.update(companyMemberTable)
+			.set({ canManageCategories, updatedAt: new Date() })
+			.where(and(eq(companyMemberTable.id, memberId), eq(companyMemberTable.companyId, companyId)));
 
 		return { success: true };
 	},
@@ -170,6 +488,11 @@ export const actions: Actions = {
 
 		if (platform?.env?.DB) {
 			const db = getDb(platform.env.DB);
+			const allowed = await checkCanManageCategories(db, companyId, locals.user.id);
+			if (!allowed) {
+				return fail(403, { error: 'You do not have permission to manage categories for this company.' });
+			}
+
 			await db.insert(categoryTable).values({
 				id: crypto.randomUUID(),
 				companyId,
@@ -202,6 +525,21 @@ export const actions: Actions = {
 
 		if (platform?.env?.DB) {
 			const db = getDb(platform.env.DB);
+			const [cat] = await db
+				.select()
+				.from(categoryTable)
+				.where(eq(categoryTable.id, categoryId))
+				.limit(1);
+
+			if (!cat) {
+				return fail(404, { error: 'Category not found.' });
+			}
+
+			const allowed = await checkCanManageCategories(db, cat.companyId, locals.user.id);
+			if (!allowed) {
+				return fail(403, { error: 'You do not have permission to manage categories for this company.' });
+			}
+
 			await db
 				.update(categoryTable)
 				.set({
@@ -230,6 +568,20 @@ export const actions: Actions = {
 
 		if (platform?.env?.DB) {
 			const db = getDb(platform.env.DB);
+			const [cat] = await db
+				.select()
+				.from(categoryTable)
+				.where(eq(categoryTable.id, categoryId))
+				.limit(1);
+
+			if (!cat) {
+				return fail(404, { error: 'Category not found.' });
+			}
+
+			const allowed = await checkCanManageCategories(db, cat.companyId, locals.user.id);
+			if (!allowed) {
+				return fail(403, { error: 'You do not have permission to manage categories for this company.' });
+			}
 
 			// Check if any expenses are linked to this category
 			const linkedExpenses = await db
@@ -246,6 +598,245 @@ export const actions: Actions = {
 
 			await db.delete(categoryTable).where(eq(categoryTable.id, categoryId));
 		}
+
+		return { success: true };
+	},
+
+	createPaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const companyId = String(data.get('companyId') || '');
+		const name = String(data.get('name') || '').trim();
+		const cardNumber = String(data.get('cardNumber') || '').trim() || null;
+		const isDefault = data.get('isDefault') === 'true' || data.get('isDefault') === 'on';
+
+		if (!companyId || !name) {
+			return fail(400, { error: 'Payment card or account name is required.' });
+		}
+
+		if (name.length < 2) {
+			return fail(400, { error: 'Card or account name must be at least 2 characters.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		// Must be entity owner
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		// Check existing cards for this company
+		const existingCards = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.companyId, companyId));
+
+		// If user selected isDefault OR this is the first card for the entity, make it default
+		const shouldBeDefault = isDefault || existingCards.length === 0;
+
+		if (shouldBeDefault && existingCards.length > 0) {
+			// Clear existing defaults for this company
+			await db
+				.update(paymentAccountTable)
+				.set({ isDefault: false, updatedAt: new Date() })
+				.where(eq(paymentAccountTable.companyId, companyId));
+		}
+
+		await db.insert(paymentAccountTable).values({
+			id: crypto.randomUUID(),
+			companyId,
+			name,
+			cardNumber,
+			isDefault: shouldBeDefault
+		});
+
+		return { success: true, accountCreated: true };
+	},
+
+	updatePaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const id = String(data.get('id') || '');
+		const name = String(data.get('name') || '').trim();
+		const cardNumber = String(data.get('cardNumber') || '').trim() || null;
+
+		if (!id || !name) {
+			return fail(400, { error: 'Card ID and name are required.' });
+		}
+
+		if (name.length < 2) {
+			return fail(400, { error: 'Card or account name must be at least 2 characters.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		const [card] = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.id, id))
+			.limit(1);
+
+		if (!card) {
+			return fail(404, { error: 'Payment card not found.' });
+		}
+
+		// Verify owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, card.companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		await db
+			.update(paymentAccountTable)
+			.set({ name, cardNumber, updatedAt: new Date() })
+			.where(eq(paymentAccountTable.id, id));
+
+		return { success: true };
+	},
+
+	deletePaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const id = String(data.get('id') || '');
+
+		if (!id) {
+			return fail(400, { error: 'Card ID is required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		const [card] = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.id, id))
+			.limit(1);
+
+		if (!card) {
+			return fail(404, { error: 'Payment card not found.' });
+		}
+
+		// Verify owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, card.companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		// Check count of cards for this company
+		const allCards = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.companyId, card.companyId))
+			.orderBy(asc(paymentAccountTable.createdAt));
+
+		if (allCards.length <= 1) {
+			return fail(400, {
+				error: 'Cannot delete the only payment card. Every company or personal profile must maintain at least one payment method.'
+			});
+		}
+
+		// If the card being deleted was default, promote the oldest remaining card to default
+		if (card.isDefault) {
+			const nextDefault = allCards.find((c) => c.id !== card.id);
+			if (nextDefault) {
+				await db
+					.update(paymentAccountTable)
+					.set({ isDefault: true, updatedAt: new Date() })
+					.where(eq(paymentAccountTable.id, nextDefault.id));
+			}
+		}
+
+		await db.delete(paymentAccountTable).where(eq(paymentAccountTable.id, id));
+
+		return { success: true };
+	},
+
+	setDefaultPaymentAccount: async ({ request, locals, platform }) => {
+		if (!locals.user) {
+			throw redirect(303, '/login');
+		}
+
+		const data = await request.formData();
+		const id = String(data.get('id') || '');
+
+		if (!id) {
+			return fail(400, { error: 'Card ID is required.' });
+		}
+
+		if (!platform?.env?.DB) {
+			return fail(500, { error: 'Database service unavailable.' });
+		}
+
+		const db = getDb(platform.env.DB);
+
+		const [card] = await db
+			.select()
+			.from(paymentAccountTable)
+			.where(eq(paymentAccountTable.id, id))
+			.limit(1);
+
+		if (!card) {
+			return fail(404, { error: 'Payment card not found.' });
+		}
+
+		// Verify owner of company
+		const [comp] = await db
+			.select()
+			.from(companyTable)
+			.where(and(eq(companyTable.id, card.companyId), eq(companyTable.ownerUserId, locals.user.id)))
+			.limit(1);
+
+		if (!comp) {
+			return fail(403, { error: 'Only the entity owner can manage payment cards.' });
+		}
+
+		// Reset all cards for this company to isDefault = false
+		await db
+			.update(paymentAccountTable)
+			.set({ isDefault: false, updatedAt: new Date() })
+			.where(eq(paymentAccountTable.companyId, card.companyId));
+
+		// Set target card to isDefault = true
+		await db
+			.update(paymentAccountTable)
+			.set({ isDefault: true, updatedAt: new Date() })
+			.where(eq(paymentAccountTable.id, id));
 
 		return { success: true };
 	}
